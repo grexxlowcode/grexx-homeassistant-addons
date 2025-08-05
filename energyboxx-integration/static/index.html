@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Energyboxx Add-on Config</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; }
+        label { display: block; margin-top: 1em; }
+        input, textarea { width: 100%; }
+        .section { margin-bottom: 2em; }
+        #logs { background: #222; color: #eee; padding: 1em; height: 200px; overflow-y: scroll; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>Energyboxx Add-on Configuration</h1>
+    <div class="section">
+        <form id="configForm">
+            <label>MQTT Host: <input type="text" name="energyboxx_mqtt_host"></label>
+            <label>MQTT Port: <input type="number" name="energyboxx_mqtt_port"></label>
+            <label>MQTT Username: <input type="text" name="energyboxx_mqtt_username"></label>
+            <label>MQTT Password: <input type="password" name="energyboxx_mqtt_password"></label>
+            <label>Statestream Domains (comma separated): <input type="text" name="mqtt_statestream_include_domains"></label>
+            <label>Statestream Base Topic: <input type="text" name="mqtt_statestream_base_topic"></label>
+            <button type="submit">Save Config</button>
+        </form>
+        <div id="saveStatus"></div>
+    </div>
+    <div class="section">
+        <h2>Addon Logs</h2>
+        <button onclick="loadLogs()">Refresh Logs</button>
+        <div id="logs">Loading...</div>
+    </div>
+    <script>
+    function loadConfig() {
+        fetch('/api/config').then(r => r.json()).then(cfg => {
+            document.querySelector('[name=energyboxx_mqtt_host]').value = cfg.energyboxx_mqtt_host || '';
+            document.querySelector('[name=energyboxx_mqtt_port]').value = cfg.energyboxx_mqtt_port || '';
+            document.querySelector('[name=energyboxx_mqtt_username]').value = cfg.energyboxx_mqtt_username || '';
+            document.querySelector('[name=energyboxx_mqtt_password]').value = cfg.energyboxx_mqtt_password || '';
+            document.querySelector('[name=mqtt_statestream_include_domains]').value = (cfg.mqtt_statestream_include_domains || []).join(',');
+            document.querySelector('[name=mqtt_statestream_base_topic]').value = cfg.mqtt_statestream_base_topic || '';
+        });
+    }
+    document.getElementById('configForm').onsubmit = function(e) {
+        e.preventDefault();
+        const data = {
+            energyboxx_mqtt_host: document.querySelector('[name=energyboxx_mqtt_host]').value,
+            energyboxx_mqtt_port: parseInt(document.querySelector('[name=energyboxx_mqtt_port]').value, 10),
+            energyboxx_mqtt_username: document.querySelector('[name=energyboxx_mqtt_username]').value,
+            energyboxx_mqtt_password: document.querySelector('[name=energyboxx_mqtt_password]').value,
+            mqtt_statestream_include_domains: document.querySelector('[name=mqtt_statestream_include_domains]').value.split(',').map(s => s.trim()),
+            mqtt_statestream_base_topic: document.querySelector('[name=mqtt_statestream_base_topic]').value
+        };
+        fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        }).then(r => r.json()).then(resp => {
+            document.getElementById('saveStatus').textContent = resp.success ? 'Saved!' : ('Error: ' + resp.error);
+        });
+    };
+    function loadLogs() {
+        fetch('/api/logs').then(r => r.text()).then(txt => {
+            document.getElementById('logs').innerHTML = txt;
+        });
+    }
+    loadConfig();
+    loadLogs();
+    </script>
+</body>
+</html>
+

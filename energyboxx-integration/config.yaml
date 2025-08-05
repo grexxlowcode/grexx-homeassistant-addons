@@ -1,0 +1,33 @@
+name: "Energyboxx Integration"
+description: "Integration for Energyboxx with MQTT bridge and service automation"
+version: "1.0.0"
+slug: "energyboxx"
+init: false
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+startup: application
+boot: auto
+options:
+  energyboxx_mqtt_host: ""
+  energyboxx_mqtt_port: 1883
+  energyboxx_mqtt_username: ""
+  energyboxx_mqtt_password: ""
+  mqtt_statestream_include_domains:
+    - switch
+    - light
+    - climate
+  mqtt_statestream_base_topic: "homeassistant"
+schema:
+  energyboxx_mqtt_host: str
+  energyboxx_mqtt_port: port
+  energyboxx_mqtt_username: str
+  energyboxx_mqtt_password: str
+  mqtt_statestream_include_domains:
+    - str
+  mqtt_statestream_base_topic: str
+webui: "http://[HOST]:[PORT:8080]/"
+logs: true
