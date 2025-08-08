@@ -1,21 +1,15 @@
 ARG BUILD_FROM
 FROM $BUILD_FROM
 
-# Install required packages
-RUN \
-    apk add --no-cache \
-        python3 \
-        py3-pip \
-        jq \
-        mosquitto \
-        mosquitto-clients \
-        py3-flask
+RUN apk add --no-cache jq mosquitto # mosquitto-clients
 
-# Copy data for add-on
-COPY run.sh /
-COPY setup_mqtt.py /
-COPY automation.yaml /
+WORKDIR /app
 
-RUN chmod a+x /run.sh
+COPY run.sh ./run.sh
+COPY automation.json ./automation.json
+COPY statestream-config.yaml ./statestream-config.yaml
+COPY mosquitto.conf ./mosquitto.conf
 
-CMD [ "/run.sh" ]
+RUN chmod +x ./run.sh
+
+CMD ["/app/run.sh"]

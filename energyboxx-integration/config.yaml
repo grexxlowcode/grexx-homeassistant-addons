@@ -12,22 +12,35 @@ arch:
 startup: application
 boot: auto
 options:
-  energyboxx_mqtt_host: ""
-  energyboxx_mqtt_port: 1883
+  energyboxx_mqtt_host: "ess.grexxconnect.com"
+  energyboxx_mqtt_port: 8883
   energyboxx_mqtt_username: ""
   energyboxx_mqtt_password: ""
-  mqtt_statestream_include_domains:
-    - switch
-    - light
-    - climate
-  mqtt_statestream_base_topic: "homeassistant"
+  mqtt_statestream_base_topic: ""
+  mqtt_client_cafile_b64: ""
+  mqtt_client_certfile_b64: ""
+  mqtt_client_keyfile_b64: ""
 schema:
   energyboxx_mqtt_host: str
   energyboxx_mqtt_port: port
   energyboxx_mqtt_username: str
   energyboxx_mqtt_password: str
-  mqtt_statestream_include_domains:
-    - str
   mqtt_statestream_base_topic: str
-webui: "http://[HOST]:[PORT:8080]/"
+  mqtt_client_cafile_b64: str
+  mqtt_client_certfile_b64: str
+  mqtt_client_keyfile_b64: str
 logs: true
+homeassistant_api: true
+hassio_api: true
+hassio_role: default
+full_access: true
+map:
+  - config:rw
+ports:
+  1885/tcp: 1885
+services:
+  - mqtt:provide
+discovery:
+  - mqtt
+startup: system
+watchdog: tcp://[HOST]:1885
