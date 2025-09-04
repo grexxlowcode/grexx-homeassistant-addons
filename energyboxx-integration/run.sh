@@ -13,6 +13,22 @@ ENERGYBOXX_PORT=$(bashio::config 'energyboxx_mqtt_port')
 ENERGYBOXX_USER=$(bashio::config 'energyboxx_mqtt_username')
 ENERGYBOXX_PASSWORD=$(bashio::config 'energyboxx_mqtt_password')
 
+# --- Force bridge traffic via main network interface ---
+# Resolve broker IP using system DNS (not Tailscale DNS)
+BROKER_IP=$(getent hosts "$ENERGYBOXX_HOST" | awk '{ print $1 }')
+if [ -z "$BROKER_IP" ]; then
+  bashio::log.error "Could not resolve broker IP for $ENERGYBOXX_HOST. Bridge may fail."
+else
+  bashio::log.info "Broker $ENERGYBOXX_HOST resolved to $BROKER_IP"
+  # Find main network interface (not tailscale0)
+  MAIN_IFACE=$(ip route | grep default | awk '{print $5}')
+  bashio::log.info "Default network interface: $MAIN_IFACE"
+  # Add static route for broker IP via main interface
+  ip route add "$BROKER_IP" dev "$MAIN_IFACE" || bashio::log.warning "Could not add static route for $BROKER_IP via $MAIN_IFACE (may already exist)"
+  # Show route for broker
+  ip route get "$BROKER_IP"
+fi
+
 # Get Tailscale authkey from config
 TAILSCALE_AUTHKEY=$(bashio::config 'tailscale_authkey')
 
