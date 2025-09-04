@@ -46,6 +46,7 @@ else
   bashio::log.error "mosquitto.conf not found at $MOSQUITTO_CONF_SRC."
 fi
 
+# Print generated mosquitto.conf for verification
 # Ensure MQTT integration is enabled in configuration.yaml and points to our broker
 CONFIG_PATH="/config/configuration.yaml"
 
