@@ -20,10 +20,15 @@ else
   MAIN_IFACE=$(ip route | grep default | awk '{print $5}')
   bashio::log.info "Default network interface: $MAIN_IFACE"
   # Remove any previous route for broker IP
+  bashio::log.info "Setting static route for $BROKER_IP via $MAIN_IFACE..."
   ip route del "$BROKER_IP" 2>/dev/null
   # Add static route for broker IP via main interface
+
+  bashio::log.info "Adding static route for $BROKER_IP via $MAIN_IFACE..."
   ip route add "$BROKER_IP" dev "$MAIN_IFACE" || bashio::log.warning "Could not add static route for $BROKER_IP via $MAIN_IFACE (may already exist)"
   # Show route for broker
+
+  bashio::log.info "Current route for $BROKER_IP:"
   ip route get "$BROKER_IP"
 fi
 
