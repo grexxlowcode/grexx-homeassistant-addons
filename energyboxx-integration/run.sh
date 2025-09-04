@@ -4,8 +4,8 @@ bashio::log.info "Starting Energyboxx MQTT Bridge Add-on..."
 
 # Start tailscaled daemon in the background
 bashio::log.info "Starting tailscaled daemon..."
-tailscaled --state=/config/tailscale.state --socket=/run/tailscale/tailscaled.sock &
-sleep 3
+#tailscaled --state=/config/tailscale.state --socket=/run/tailscale/tailscaled.sock &
+#sleep 3
 
 # Get config values
 ENERGYBOXX_HOST=$(bashio::config 'energyboxx_mqtt_host')
@@ -18,7 +18,7 @@ TAILSCALE_AUTHKEY=$(bashio::config 'tailscale_authkey')
 
 if [ -n "$TAILSCALE_AUTHKEY" ]; then
   bashio::log.info "Running tailscale up with provided authkey..."
-  tailscale --socket=/run/tailscale/tailscaled.sock up --login-server=https://headscale.grexx.io --authkey="$TAILSCALE_AUTHKEY" --reset
+#  tailscale --socket=/run/tailscale/tailscaled.sock up --login-server=https://headscale.grexx.io --authkey="$TAILSCALE_AUTHKEY" --reset
   if [ $? -eq 0 ]; then
     bashio::log.info "Tailscale started successfully."
   else
@@ -45,6 +45,10 @@ if [ -f "$MOSQUITTO_CONF_SRC" ]; then
 else
   bashio::log.error "mosquitto.conf not found at $MOSQUITTO_CONF_SRC."
 fi
+
+# Print generated mosquitto.conf for verification
+bashio::log.info "Generated mosquitto.conf contents:"
+cat "$MOSQUITTO_CONF_DEST"
 
 # Ensure MQTT integration is enabled in configuration.yaml and points to our broker
 CONFIG_PATH="/config/configuration.yaml"
@@ -87,10 +91,22 @@ cat /config/ssl/grexxconnect_ca.crt
 cat /config/ssl/grexxconnect_client.crt
 cat /config/ssl/grexxconnect_client.key
 
-# Start mosquitto with the updated config
-bashio::log.info "Starting mosquitto with updated configuration..."
-mosquitto -c /etc/mosquitto/mosquitto.conf &
-sleep 5
+# Print certificate file status
+bashio::log.info "Cert file status:"
+ls -lh /config/ssl
+for f in /config/ssl/*; do
+  bashio::log.info "Contents of $f:"
+  head -n 10 "$f"
+  bashio::log.info "---"
+done
+
+# Test network connectivity before starting mosquitto
+bashio::log.info "Testing connectivity to $ENERGYBOXX_HOST:$ENERGYBOXX_PORT..."
+nc -zvw5 $ENERGYBOXX_HOST $ENERGYBOXX_PORT
+
+# Start mosquitto in foreground for full log output
+bashio::log.info "Starting mosquitto with updated configuration (foreground)..."
+mosquitto -c /etc/mosquitto/mosquitto.conf
 
 # --- Bash logic for Home Assistant API setup ---
 SUPERVISOR_API="${SUPERVISOR_API:-http://supervisor/core/api}"
