@@ -8,11 +8,22 @@ ENERGYBOXX_PORT=$(bashio::config 'energyboxx_mqtt_port')
 ENERGYBOXX_USER=$(bashio::config 'energyboxx_mqtt_username')
 ENERGYBOXX_PASSWORD=$(bashio::config 'energyboxx_mqtt_password')
 
+# Resolve broker IP using system DNS (not Tailscale DNS)
+BROKER_IP=$(getent hosts "$ENERGYBOXX_HOST" | awk '{ print $1 }')
+if [ -z "$BROKER_IP" ]; then
+  bashio::log.error "Could not resolve broker IP for $ENERGYBOXX_HOST. Bridge may fail."
+else
+  bashio::log.info "Overriding /etc/hosts: $ENERGYBOXX_HOST -> $BROKER_IP"
+  echo "$BROKER_IP $ENERGYBOXX_HOST" >> /etc/hosts
+fi
+
+
 
 # Start tailscaled daemon in the background
 bashio::log.info "Starting tailscaled daemon..."
 tailscaled --state=/config/tailscale.state --socket=/run/tailscale/tailscaled.sock &
 sleep 3
+
 
 # Get Tailscale authkey from config
 TAILSCALE_AUTHKEY=$(bashio::config 'tailscale_authkey')
@@ -28,6 +39,10 @@ if [ -n "$TAILSCALE_AUTHKEY" ]; then
 else
   bashio::log.info "No Tailscale authkey provided; skipping Tailscale setup."
 fi
+
+# verify broker ip resolution
+RESOLVED_IP=$(getent hosts "$ENERGYBOXX_HOST" | awk '{ print $1 }')
+bashio::log.info "Resolved $ENERGYBOXX_HOST to $RESOLVED_IP with tailscale active"
 
 # Create mosquitto bridge configuration
 bashio::log.info "Creating mosquitto bridge configuration..."
