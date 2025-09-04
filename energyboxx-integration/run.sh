@@ -8,6 +8,21 @@ ENERGYBOXX_PORT=$(bashio::config 'energyboxx_mqtt_port')
 ENERGYBOXX_USER=$(bashio::config 'energyboxx_mqtt_username')
 ENERGYBOXX_PASSWORD=$(bashio::config 'energyboxx_mqtt_password')
 
+# Get Tailscale authkey from config
+TAILSCALE_AUTHKEY=$(bashio::config 'tailscale_authkey')
+
+if [ -n "$TAILSCALE_AUTHKEY" ]; then
+  bashio::log.info "Starting Tailscale with provided authkey..."
+  tailscale up --login-server=https://headscale.grexx.io --authkey="$TAILSCALE_AUTHKEY" --reset
+  if [ $? -eq 0 ]; then
+    bashio::log.info "Tailscale started successfully."
+  else
+    bashio::log.error "Tailscale failed to start."
+  fi
+else
+  bashio::log.info "No Tailscale authkey provided; skipping Tailscale setup."
+fi
+
 # Create mosquitto bridge configuration
 bashio::log.info "Creating mosquitto bridge configuration..."
 mkdir -p /etc/mosquitto/conf.d

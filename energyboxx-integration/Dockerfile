@@ -1,7 +1,7 @@
 ARG BUILD_FROM
 FROM $BUILD_FROM
 
-RUN apk add --no-cache jq mosquitto # mosquitto-clients
+RUN apk add --no-cache jq mosquitto tailscale iptables ip6tables iproute2
 
 WORKDIR /app
 
