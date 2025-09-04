@@ -2,31 +2,11 @@
 
 bashio::log.info "Starting Energyboxx MQTT Bridge Add-on..."
 
-# Start tailscaled daemon in the background
-bashio::log.info "Starting tailscaled daemon..."
-#tailscaled --state=/config/tailscale.state --socket=/run/tailscale/tailscaled.sock &
-#sleep 3
-
 # Get config values
 ENERGYBOXX_HOST=$(bashio::config 'energyboxx_mqtt_host')
 ENERGYBOXX_PORT=$(bashio::config 'energyboxx_mqtt_port')
 ENERGYBOXX_USER=$(bashio::config 'energyboxx_mqtt_username')
 ENERGYBOXX_PASSWORD=$(bashio::config 'energyboxx_mqtt_password')
-
-# Get Tailscale authkey from config
-TAILSCALE_AUTHKEY=$(bashio::config 'tailscale_authkey')
-
-if [ -n "$TAILSCALE_AUTHKEY" ]; then
-  bashio::log.info "Running tailscale up with provided authkey..."
-#  tailscale --socket=/run/tailscale/tailscaled.sock up --login-server=https://headscale.grexx.io --authkey="$TAILSCALE_AUTHKEY" --reset
-  if [ $? -eq 0 ]; then
-    bashio::log.info "Tailscale started successfully."
-  else
-    bashio::log.error "Tailscale failed to start."
-  fi
-else
-  bashio::log.info "No Tailscale authkey provided; skipping Tailscale setup."
-fi
 
 # Create mosquitto bridge configuration
 bashio::log.info "Creating mosquitto bridge configuration..."
@@ -45,10 +25,6 @@ if [ -f "$MOSQUITTO_CONF_SRC" ]; then
 else
   bashio::log.error "mosquitto.conf not found at $MOSQUITTO_CONF_SRC."
 fi
-
-# Print generated mosquitto.conf for verification
-bashio::log.info "Generated mosquitto.conf contents:"
-cat "$MOSQUITTO_CONF_DEST"
 
 # Ensure MQTT integration is enabled in configuration.yaml and points to our broker
 CONFIG_PATH="/config/configuration.yaml"
