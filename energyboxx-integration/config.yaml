@@ -1,6 +1,6 @@
 name: "Energyboxx Integration"
 description: "Integration for Energyboxx with MQTT bridge and service automation"
-version: "1.0.12"
+version: "1.0.13"
 slug: "energyboxx"
 init: false
 arch:
