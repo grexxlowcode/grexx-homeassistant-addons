@@ -4,8 +4,8 @@ bashio::log.info "Starting Energyboxx MQTT Bridge Add-on..."
 
 # Start tailscaled daemon in the background
 bashio::log.info "Starting tailscaled daemon..."
-#tailscaled --state=/config/tailscale.state --socket=/run/tailscale/tailscaled.sock &
-#sleep 3
+tailscaled --state=/config/tailscale.state --socket=/run/tailscale/tailscaled.sock &
+sleep 3
 
 # Get config values
 ENERGYBOXX_HOST=$(bashio::config 'energyboxx_mqtt_host')
@@ -18,7 +18,7 @@ TAILSCALE_AUTHKEY=$(bashio::config 'tailscale_authkey')
 
 if [ -n "$TAILSCALE_AUTHKEY" ]; then
   bashio::log.info "Running tailscale up with provided authkey..."
-#  tailscale --socket=/run/tailscale/tailscaled.sock up --login-server=https://headscale.grexx.io --authkey="$TAILSCALE_AUTHKEY" --reset
+  tailscale --socket=/run/tailscale/tailscaled.sock up --login-server=https://headscale.grexx.io --authkey="$TAILSCALE_AUTHKEY" --reset
   if [ $? -eq 0 ]; then
     bashio::log.info "Tailscale started successfully."
   else
