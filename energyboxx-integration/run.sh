@@ -39,6 +39,7 @@ MOSQUITTO_CONF_DEST="/etc/mosquitto/mosquitto.conf"
 if [ -f "$MOSQUITTO_CONF_SRC" ]; then
   bashio::log.info "Configuring mosquitto.conf for broker..."
   cp "$MOSQUITTO_CONF_SRC" "$MOSQUITTO_CONF_DEST"
+  sed -i "s|HOST_REPLACE_TOKEN|$ENERGYBOXX_HOST|g" "$MOSQUITTO_CONF_DEST"
   sed -i "s|USERNAME_REPLACE_TOKEN|$ENERGYBOXX_USER|g" "$MOSQUITTO_CONF_DEST"
   sed -i "s|PASSWORD_REPLACE_TOKEN|$ENERGYBOXX_PASSWORD|g" "$MOSQUITTO_CONF_DEST"
   sed -i "s|CLIENT_ID_REPLACE_TOKEN|energyboxx-addon-$(hostname)-$ENERGYBOXX_USER|g" "$MOSQUITTO_CONF_DEST"
