@@ -2,11 +2,6 @@
 
 bashio::log.info "Starting Energyboxx MQTT Bridge Add-on..."
 
-# Start tailscaled daemon in the background
-bashio::log.info "Starting tailscaled daemon..."
-tailscaled --state=/config/tailscale.state --socket=/run/tailscale/tailscaled.sock &
-sleep 3
-
 # Get config values
 ENERGYBOXX_HOST=$(bashio::config 'energyboxx_mqtt_host')
 ENERGYBOXX_PORT=$(bashio::config 'energyboxx_mqtt_port')
@@ -31,6 +26,11 @@ else
   # Show route for broker
   ip route get "$BROKER_IP"
 fi
+
+# Start tailscaled daemon in the background
+bashio::log.info "Starting tailscaled daemon..."
+tailscaled --state=/config/tailscale.state --socket=/run/tailscale/tailscaled.sock &
+sleep 3
 
 # Get Tailscale authkey from config
 TAILSCALE_AUTHKEY=$(bashio::config 'tailscale_authkey')
