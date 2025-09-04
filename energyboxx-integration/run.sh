@@ -91,22 +91,10 @@ cat /config/ssl/grexxconnect_ca.crt
 cat /config/ssl/grexxconnect_client.crt
 cat /config/ssl/grexxconnect_client.key
 
-# Print certificate file status
-bashio::log.info "Cert file status:"
-ls -lh /config/ssl
-for f in /config/ssl/*; do
-  bashio::log.info "Contents of $f:"
-  head -n 10 "$f"
-  bashio::log.info "---"
-done
-
-# Test network connectivity before starting mosquitto
-bashio::log.info "Testing connectivity to $ENERGYBOXX_HOST:$ENERGYBOXX_PORT..."
-nc -zvw5 $ENERGYBOXX_HOST $ENERGYBOXX_PORT
-
-# Start mosquitto in foreground for full log output
-bashio::log.info "Starting mosquitto with updated configuration (foreground)..."
-mosquitto -c /etc/mosquitto/mosquitto.conf
+# Start mosquitto with the updated config
+bashio::log.info "Starting mosquitto with updated configuration..."
+mosquitto -c /etc/mosquitto/mosquitto.conf &
+sleep 5
 
 # --- Bash logic for Home Assistant API setup ---
 SUPERVISOR_API="${SUPERVISOR_API:-http://supervisor/core/api}"
