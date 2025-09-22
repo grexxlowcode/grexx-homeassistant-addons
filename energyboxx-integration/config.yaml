@@ -1,6 +1,6 @@
 name: "Energyboxx Integration"
 description: "Integration for Energyboxx with MQTT bridge and service automation"
-version: "1.0.17"
+version: "1.0.18"
 slug: "energyboxx"
 init: false
 arch:
@@ -9,7 +9,6 @@ arch:
   - armhf
   - armv7
   - i386
-startup: application
 boot: auto
 options:
   energyboxx_mqtt_host: "ess.grexxconnect.com"
