@@ -71,6 +71,7 @@ CONFIG_PATH="/config/configuration.yaml"
 MQTT_CLIENT_CAFILE_B64=$(bashio::config 'mqtt_client_cafile_b64')
 MQTT_CLIENT_CERTFILE_B64=$(bashio::config 'mqtt_client_certfile_b64')
 MQTT_CLIENT_KEYFILE_B64=$(bashio::config 'mqtt_client_keyfile_b64')
+MQTT_CLIENT_CERT_OPTIONAL=$(bashio::config 'mqtt_client_cert_optional')
 
 # Ensure /config/ssl directory exists
 mkdir -p /config/ssl
@@ -82,19 +83,26 @@ if [ -n "$MQTT_CLIENT_CAFILE_B64" ]; then
 else
   bashio::log.warning "No CA file provided in options. /config/ssl/grexxconnect_ca.crt will not be created."
 fi
-# Write client cert from base64 if provided
-if [ -n "$MQTT_CLIENT_CERTFILE_B64" ]; then
-  bashio::log.info "Decoding and writing client cert to /config/ssl/grexxconnect_client.crt"
-  echo "$MQTT_CLIENT_CERTFILE_B64" | base64 -d > /config/ssl/grexxconnect_client.crt
+
+# Only write client cert/key if not optional
+if [ "$MQTT_CLIENT_CERT_OPTIONAL" = "false" ]; then
+  if [ -n "$MQTT_CLIENT_CERTFILE_B64" ]; then
+    bashio::log.info "Decoding and writing client cert to /config/ssl/grexxconnect_client.crt"
+    echo "$MQTT_CLIENT_CERTFILE_B64" | base64 -d > /config/ssl/grexxconnect_client.crt
+  else
+    bashio::log.warning "No client cert provided in options. /config/ssl/grexxconnect_client.crt will not be created."
+  fi
+  if [ -n "$MQTT_CLIENT_KEYFILE_B64" ]; then
+    bashio::log.info "Decoding and writing client key to /config/ssl/grexxconnect_client.key"
+    echo "$MQTT_CLIENT_KEYFILE_B64" | base64 -d > /config/ssl/grexxconnect_client.key
+  else
+    bashio::log.warning "No client key provided in options. /config/ssl/grexxconnect_client.key will not be created."
+  fi
 else
-  bashio::log.warning "No client cert provided in options. /config/ssl/grexxconnect_client.crt will not be created."
-fi
-# Write client key from base64 if provided
-if [ -n "$MQTT_CLIENT_KEYFILE_B64" ]; then
-  bashio::log.info "Decoding and writing client key to /config/ssl/grexxconnect_client.key"
-  echo "$MQTT_CLIENT_KEYFILE_B64" | base64 -d > /config/ssl/grexxconnect_client.key
-else
-  bashio::log.warning "No client key provided in options. /config/ssl/grexxconnect_client.key will not be created."
+  bashio::log.info "Client certificate/key are optional and will not be written."
+  # Remove cert/key lines from mosquitto.conf if present
+  sed -i '/bridge_certfile/d' "$MOSQUITTO_CONF_DEST"
+  sed -i '/bridge_keyfile/d' "$MOSQUITTO_CONF_DEST"
 fi
 
 # print files
