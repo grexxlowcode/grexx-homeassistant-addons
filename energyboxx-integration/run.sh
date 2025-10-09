@@ -17,32 +17,35 @@ else
   echo "$BROKER_IP $ENERGYBOXX_HOST" >> /etc/hosts
 fi
 
+# Get Tailscale enabled flag from config
+TAILSCALE_ENABLED=$(bashio::config 'tailscale_enabled')
 
+if bashio::var.true "$TAILSCALE_ENABLED"; then
+  # Start tailscaled daemon in the background
+  bashio::log.info "Starting tailscaled daemon..."
+  tailscaled --state=/config/tailscale.state --socket=/run/tailscale/tailscaled.sock &
+  sleep 3
 
-# Start tailscaled daemon in the background
-bashio::log.info "Starting tailscaled daemon..."
-tailscaled --state=/config/tailscale.state --socket=/run/tailscale/tailscaled.sock &
-sleep 3
+  # Get Tailscale authkey from config
+  TAILSCALE_AUTHKEY=$(bashio::config 'tailscale_authkey')
 
-
-# Get Tailscale authkey from config
-TAILSCALE_AUTHKEY=$(bashio::config 'tailscale_authkey')
-
-if [ -n "$TAILSCALE_AUTHKEY" ]; then
-  bashio::log.info "Running tailscale up with provided authkey..."
-  tailscale --socket=/run/tailscale/tailscaled.sock up --login-server=https://headscale.grexx.io --authkey="$TAILSCALE_AUTHKEY" --reset
-  if [ $? -eq 0 ]; then
-    bashio::log.info "Tailscale started successfully."
+  if [ -n "$TAILSCALE_AUTHKEY" ]; then
+    bashio::log.info "Running tailscale up with provided authkey..."
+    tailscale --socket=/run/tailscale/tailscaled.sock up --login-server=https://headscale.grexx.io --authkey="$TAILSCALE_AUTHKEY" --reset
+    if [ $? -eq 0 ]; then
+      bashio::log.info "Tailscale started successfully."
+    else
+      bashio::log.error "Tailscale failed to start."
+    fi
   else
-    bashio::log.error "Tailscale failed to start."
+    bashio::log.info "No Tailscale authkey provided; skipping Tailscale setup."
   fi
+  # verify broker ip resolution
+  RESOLVED_IP=$(getent hosts "$ENERGYBOXX_HOST" | awk '{ print $1 }')
+  bashio::log.info "Resolved $ENERGYBOXX_HOST to $RESOLVED_IP with tailscale active"
 else
-  bashio::log.info "No Tailscale authkey provided; skipping Tailscale setup."
+  bashio::log.info "Tailscale is disabled by configuration; skipping Tailscale setup."
 fi
-
-# verify broker ip resolution
-RESOLVED_IP=$(getent hosts "$ENERGYBOXX_HOST" | awk '{ print $1 }')
-bashio::log.info "Resolved $ENERGYBOXX_HOST to $RESOLVED_IP with tailscale active"
 
 # Create mosquitto bridge configuration
 bashio::log.info "Creating mosquitto bridge configuration..."
@@ -108,10 +111,7 @@ fi
 # print files
 bashio::log.info "Contents of /config/ssl directory:"
 ls -l /config/ssl
-# print file contents
-cat /config/ssl/grexxconnect_ca.crt
-cat /config/ssl/grexxconnect_client.crt
-cat /config/ssl/grexxconnect_client.key
+
 
 # Start mosquitto with the updated config
 bashio::log.info "Starting mosquitto with updated configuration..."
