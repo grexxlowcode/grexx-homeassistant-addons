@@ -287,14 +287,17 @@ publish_entity_states_to_mqtt() {
     CA_FILE="/config/ssl/grexxconnect_ca.crt"
     CERT_FILE="/config/ssl/grexxconnect_client.crt"
     KEY_FILE="/config/ssl/grexxconnect_client.key"
+    MQTT_CLIENT_CERT_OPTIONAL=$(bashio::config 'mqtt_client_cert_optional')
     if [ -f "$CA_FILE" ]; then
       MQTT_SSL_OPTIONS="$MQTT_SSL_OPTIONS --cafile $CA_FILE"
     fi
-    if [ -f "$CERT_FILE" ]; then
-      MQTT_SSL_OPTIONS="$MQTT_SSL_OPTIONS --cert $CERT_FILE"
-    fi
-    if [ -f "$KEY_FILE" ]; then
-      MQTT_SSL_OPTIONS="$MQTT_SSL_OPTIONS --key $KEY_FILE"
+    if [ "$MQTT_CLIENT_CERT_OPTIONAL" = "false" ]; then
+      if [ -f "$CERT_FILE" ]; then
+        MQTT_SSL_OPTIONS="$MQTT_SSL_OPTIONS --cert $CERT_FILE"
+      fi
+      if [ -f "$KEY_FILE" ]; then
+        MQTT_SSL_OPTIONS="$MQTT_SSL_OPTIONS --key $KEY_FILE"
+      fi
     fi
   fi
 
