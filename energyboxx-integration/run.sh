@@ -281,19 +281,43 @@ publish_entity_states_to_mqtt() {
     -H "Content-Type: application/json" \
     "$SUPERVISOR_API/states")
 
+  # SSL/TLS options for mosquitto_pub if using port 8883
+  MQTT_SSL_OPTIONS=""
+  if [ "$ENERGYBOXX_PORT" = "8883" ]; then
+    CA_FILE="/config/ssl/grexxconnect_ca.crt"
+    CERT_FILE="/config/ssl/grexxconnect_client.crt"
+    KEY_FILE="/config/ssl/grexxconnect_client.key"
+    if [ -f "$CA_FILE" ]; then
+      MQTT_SSL_OPTIONS="$MQTT_SSL_OPTIONS --cafile $CA_FILE"
+    fi
+    if [ -f "$CERT_FILE" ]; then
+      MQTT_SSL_OPTIONS="$MQTT_SSL_OPTIONS --cert $CERT_FILE"
+    fi
+    if [ -f "$KEY_FILE" ]; then
+      MQTT_SSL_OPTIONS="$MQTT_SSL_OPTIONS --key $KEY_FILE"
+    fi
+  fi
+
   echo "$ENTITY_STATES" | jq -c '.[]' | while read -r entity; do
     ENTITY_ID=$(echo "$entity" | jq -r '.entity_id')
-    ENTITY_TOPIC=$(echo "$ENTITY_ID" | tr '.' '/')
+    ENTITY_TOPIC=$(echo "$ENTITY_ID" | tr '.' '/' | tr -cd '[:alnum:]/:_-')
+    ENTITY_TOPIC=$(echo "$ENTITY_TOPIC" | sed 's/\/+\//g; s/\/$//; s/^\///')
     STATE=$(echo "$entity" | jq -r '.state')
     LAST_UPDATED=$(echo "$entity" | jq -r '.last_updated')
 
     bashio::log.info "Publishing state for $ENTITY_ID: $STATE (last updated: $LAST_UPDATED) at topic $BASE_TOPIC/$ENTITY_TOPIC/state"
-    mosquitto_pub -h "$ENERGYBOXX_HOST" -p "$ENERGYBOXX_PORT" \
-      -u "$ENERGYBOXX_USER" -P "$ENERGYBOXX_PASSWORD" \
-      -t "$BASE_TOPIC/$ENTITY_TOPIC/state" -m "$STATE"
-    mosquitto_pub -h "$ENERGYBOXX_HOST" -p "$ENERGYBOXX_PORT" \
-      -u "$ENERGYBOXX_USER" -P "$ENERGYBOXX_PASSWORD" \
-      -t "$BASE_TOPIC/$ENTITY_TOPIC/last_updated" -m "$LAST_UPDATED"
+    CMD="mosquitto_pub -h \"$ENERGYBOXX_HOST\" -p \"$ENERGYBOXX_PORT\" -u \"$ENERGYBOXX_USER\" -P \"$ENERGYBOXX_PASSWORD\" $MQTT_SSL_OPTIONS -t \"$BASE_TOPIC/$ENTITY_TOPIC/state\" -m \"$STATE\""
+    bashio::log.info "Running: $CMD"
+    eval $CMD
+    if [ $? -ne 0 ]; then
+      bashio::log.error "Failed to publish state for $ENTITY_ID to topic $BASE_TOPIC/$ENTITY_TOPIC/state"
+    fi
+    CMD="mosquitto_pub -h \"$ENERGYBOXX_HOST\" -p \"$ENERGYBOXX_PORT\" -u \"$ENERGYBOXX_USER\" -P \"$ENERGYBOXX_PASSWORD\" $MQTT_SSL_OPTIONS -t \"$BASE_TOPIC/$ENTITY_TOPIC/last_updated\" -m \"$LAST_UPDATED\""
+    bashio::log.info "Running: $CMD"
+    eval $CMD
+    if [ $? -ne 0 ]; then
+      bashio::log.error "Failed to publish last_updated for $ENTITY_ID to topic $BASE_TOPIC/$ENTITY_TOPIC/last_updated"
+    fi
   done
 }
 
