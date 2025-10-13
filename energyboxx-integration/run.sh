@@ -271,5 +271,35 @@ else
     bashio::log.error "Service message to Supervisor failed!"
 fi
 
+# Get MQTT Statestream enabled flag from config
+MQTT_STATESTREAM_ENABLED=$(bashio::config 'mqtt_statestream_initial_push_enabled')
+
+publish_entity_states_to_mqtt() {
+  BASE_TOPIC=$(bashio::config 'mqtt_statestream_base_topic')
+  ENTITY_STATES=$(curl -s -X GET \
+    -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
+    -H "Content-Type: application/json" \
+    "$SUPERVISOR_API/states")
+
+  echo "$ENTITY_STATES" | jq -c '.[]' | while read -r entity; do
+    ENTITY_ID=$(echo "$entity" | jq -r '.entity_id')
+    STATE=$(echo "$entity" | jq -r '.state')
+    LAST_UPDATED=$(echo "$entity" | jq -r '.last_updated')
+    mosquitto_pub -h "$ENERGYBOXX_HOST" -p "$ENERGYBOXX_PORT" \
+      -u "$ENERGYBOXX_USER" -P "$ENERGYBOXX_PASSWORD" \
+      -t "$BASE_TOPIC/$ENTITY_ID/state" -m "$STATE"
+    mosquitto_pub -h "$ENERGYBOXX_HOST" -p "$ENERGYBOXX_PORT" \
+      -u "$ENERGYBOXX_USER" -P "$ENERGYBOXX_PASSWORD" \
+      -t "$BASE_TOPIC/$ENTITY_ID/last_updated" -m "$LAST_UPDATED"
+  done
+}
+
+if bashio::var.true "$MQTT_STATESTREAM_ENABLED"; then
+  bashio::log.info "Publishing entity states to MQTT Statestream..."
+  publish_entity_states_to_mqtt
+else
+  bashio::log.info "MQTT Statestream publishing is disabled by configuration."
+fi
+
 # Keep the container running
 tail -f /dev/null

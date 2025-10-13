@@ -1,6 +1,6 @@
 name: "Energyboxx Integration"
 description: "Integration for Energyboxx with MQTT bridge and service automation"
-version: "1.0.20"
+version: "1.0.21"
 slug: "energyboxx"
 init: false
 arch:
@@ -22,6 +22,7 @@ options:
   tailscale_authkey: ""
   mqtt_client_cert_optional: false
   tailscale_enabled: false
+  mqtt_statestream_initial_push_enabled: true
 schema:
   energyboxx_mqtt_host: str
   energyboxx_mqtt_port: port
@@ -34,6 +35,7 @@ schema:
   tailscale_authkey: str
   mqtt_client_cert_optional: bool
   tailscale_enabled: bool
+  mqtt_statestream_initial_push_enabled: bool
 logs: true
 homeassistant_api: true
 hassio_api: true
