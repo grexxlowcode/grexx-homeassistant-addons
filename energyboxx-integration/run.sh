@@ -319,6 +319,7 @@ publish_entity_states_to_mqtt() {
       bashio::log.error "Failed to publish last_updated for $ENTITY_ID to topic $BASE_TOPIC/$ENTITY_TOPIC/last_updated"
     fi
   done
+  bashio::log.info "Finished publishing entity states to MQTT."
 }
 
 if bashio::var.true "$MQTT_STATESTREAM_ENABLED"; then
