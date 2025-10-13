@@ -301,7 +301,7 @@ publish_entity_states_to_mqtt() {
   echo "$ENTITY_STATES" | jq -c '.[]' | while read -r entity; do
     ENTITY_ID=$(echo "$entity" | jq -r '.entity_id')
     ENTITY_TOPIC=$(echo "$ENTITY_ID" | tr '.' '/' | tr -cd '[:alnum:]/:_-')
-    ENTITY_TOPIC=$(echo "$ENTITY_TOPIC" | sed 's/\/+\//g; s/\/$//; s/^\///')
+    ENTITY_TOPIC=$(echo "$ENTITY_TOPIC" | sed 's,//*,/,g' | sed 's,^/,,' | sed 's,/$,,')
     STATE=$(echo "$entity" | jq -r '.state')
     LAST_UPDATED=$(echo "$entity" | jq -r '.last_updated')
 
