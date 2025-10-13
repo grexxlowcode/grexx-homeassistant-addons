@@ -283,16 +283,17 @@ publish_entity_states_to_mqtt() {
 
   echo "$ENTITY_STATES" | jq -c '.[]' | while read -r entity; do
     ENTITY_ID=$(echo "$entity" | jq -r '.entity_id')
+    ENTITY_TOPIC=$(echo "$ENTITY_ID" | tr '.' '/')
     STATE=$(echo "$entity" | jq -r '.state')
     LAST_UPDATED=$(echo "$entity" | jq -r '.last_updated')
 
-    bashio::log.info "Publishing state for $ENTITY_ID: $STATE (last updated: $LAST_UPDATED) at topic $BASE_TOPIC/$ENTITY_ID/state"
+    bashio::log.info "Publishing state for $ENTITY_ID: $STATE (last updated: $LAST_UPDATED) at topic $BASE_TOPIC/$ENTITY_TOPIC/state"
     mosquitto_pub -h "$ENERGYBOXX_HOST" -p "$ENERGYBOXX_PORT" \
       -u "$ENERGYBOXX_USER" -P "$ENERGYBOXX_PASSWORD" \
-      -t "$BASE_TOPIC/$ENTITY_ID/state" -m "$STATE"
+      -t "$BASE_TOPIC/$ENTITY_TOPIC/state" -m "$STATE"
     mosquitto_pub -h "$ENERGYBOXX_HOST" -p "$ENERGYBOXX_PORT" \
       -u "$ENERGYBOXX_USER" -P "$ENERGYBOXX_PASSWORD" \
-      -t "$BASE_TOPIC/$ENTITY_ID/last_updated" -m "$LAST_UPDATED"
+      -t "$BASE_TOPIC/$ENTITY_TOPIC/last_updated" -m "$LAST_UPDATED"
   done
 }
 
