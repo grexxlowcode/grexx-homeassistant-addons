@@ -15,27 +15,21 @@ options:
   energyboxx_mqtt_port: 8883
   energyboxx_mqtt_username: ""
   energyboxx_mqtt_password: ""
-  mqtt_statestream_base_topic: ""
   mqtt_client_cafile_b64: ""
-  mqtt_client_certfile_b64: ""
-  mqtt_client_keyfile_b64: ""
+  community_topic: "community/#"
+  use_mqtt_sensors: false
   tailscale_authkey: ""
-  mqtt_client_cert_optional: false
   tailscale_enabled: false
-  mqtt_statestream_initial_push_enabled: true
 schema:
   energyboxx_mqtt_host: str
   energyboxx_mqtt_port: port
   energyboxx_mqtt_username: str
   energyboxx_mqtt_password: str
-  mqtt_statestream_base_topic: str
   mqtt_client_cafile_b64: str
-  mqtt_client_certfile_b64: str
-  mqtt_client_keyfile_b64: str
+  community_topic: str
+  use_mqtt_sensors: bool
   tailscale_authkey: str
-  mqtt_client_cert_optional: bool
   tailscale_enabled: bool
-  mqtt_statestream_initial_push_enabled: bool
 logs: true
 homeassistant_api: true
 hassio_api: true

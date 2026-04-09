@@ -7,6 +7,8 @@ ENERGYBOXX_HOST=$(bashio::config 'energyboxx_mqtt_host')
 ENERGYBOXX_PORT=$(bashio::config 'energyboxx_mqtt_port')
 ENERGYBOXX_USER=$(bashio::config 'energyboxx_mqtt_username')
 ENERGYBOXX_PASSWORD=$(bashio::config 'energyboxx_mqtt_password')
+COMMUNITY_TOPIC=$(bashio::config 'community_topic')
+USE_MQTT_SENSORS=$(bashio::config 'use_mqtt_sensors')
 
 # Resolve broker IP using system DNS (not Tailscale DNS)
 BROKER_IP=$(getent hosts "$ENERGYBOXX_HOST" | awk '{ print $1 }')
@@ -62,19 +64,13 @@ if [ -f "$MOSQUITTO_CONF_SRC" ]; then
   sed -i "s|USERNAME_REPLACE_TOKEN|$ENERGYBOXX_USER|g" "$MOSQUITTO_CONF_DEST"
   sed -i "s|PASSWORD_REPLACE_TOKEN|$ENERGYBOXX_PASSWORD|g" "$MOSQUITTO_CONF_DEST"
   sed -i "s|CLIENT_ID_REPLACE_TOKEN|energyboxx-addon-$(hostname)-$ENERGYBOXX_USER|g" "$MOSQUITTO_CONF_DEST"
+  sed -i "s|COMMUNITY_TOPIC_REPLACE_TOKEN|$COMMUNITY_TOPIC|g" "$MOSQUITTO_CONF_DEST"
 else
   bashio::log.error "mosquitto.conf not found at $MOSQUITTO_CONF_SRC."
 fi
 
-# Print generated mosquitto.conf for verification
-# Ensure MQTT integration is enabled in configuration.yaml and points to our broker
-CONFIG_PATH="/config/configuration.yaml"
-
-# Write cert and key options to files if provided (from config options, base64 support)
+# Write CA certificate for TLS verification
 MQTT_CLIENT_CAFILE_B64=$(bashio::config 'mqtt_client_cafile_b64')
-MQTT_CLIENT_CERTFILE_B64=$(bashio::config 'mqtt_client_certfile_b64')
-MQTT_CLIENT_KEYFILE_B64=$(bashio::config 'mqtt_client_keyfile_b64')
-MQTT_CLIENT_CERT_OPTIONAL=$(bashio::config 'mqtt_client_cert_optional')
 
 # Ensure /config/ssl directory exists
 mkdir -p /config/ssl
@@ -84,31 +80,10 @@ if [ -n "$MQTT_CLIENT_CAFILE_B64" ]; then
   bashio::log.info "Decoding and writing CA file to /config/ssl/grexxconnect_ca.crt"
   echo "$MQTT_CLIENT_CAFILE_B64" | base64 -d > /config/ssl/grexxconnect_ca.crt
 else
-  bashio::log.warning "No CA file provided in options. /config/ssl/grexxconnect_ca.crt will not be created."
+  bashio::log.warning "No CA file provided. TLS verification may fail."
 fi
 
-# Only write client cert/key if not optional
-if [ "$MQTT_CLIENT_CERT_OPTIONAL" = "false" ]; then
-  if [ -n "$MQTT_CLIENT_CERTFILE_B64" ]; then
-    bashio::log.info "Decoding and writing client cert to /config/ssl/grexxconnect_client.crt"
-    echo "$MQTT_CLIENT_CERTFILE_B64" | base64 -d > /config/ssl/grexxconnect_client.crt
-  else
-    bashio::log.warning "No client cert provided in options. /config/ssl/grexxconnect_client.crt will not be created."
-  fi
-  if [ -n "$MQTT_CLIENT_KEYFILE_B64" ]; then
-    bashio::log.info "Decoding and writing client key to /config/ssl/grexxconnect_client.key"
-    echo "$MQTT_CLIENT_KEYFILE_B64" | base64 -d > /config/ssl/grexxconnect_client.key
-  else
-    bashio::log.warning "No client key provided in options. /config/ssl/grexxconnect_client.key will not be created."
-  fi
-else
-  bashio::log.info "Client certificate/key are optional and will not be written."
-  # Remove cert/key lines from mosquitto.conf if present
-  sed -i '/bridge_certfile/d' "$MOSQUITTO_CONF_DEST"
-  sed -i '/bridge_keyfile/d' "$MOSQUITTO_CONF_DEST"
-fi
-
-# print files
+# Print SSL directory contents
 bashio::log.info "Contents of /config/ssl directory:"
 ls -l /config/ssl
 
@@ -158,84 +133,56 @@ wait_for_ha() {
   return 1
 }
 
-setup_mqtt_integration() {
-  bashio::log.info "Configuring Home Assistant MQTT integration to use custom mosquitto.conf..."
-  MOSQUITTO_CONF_SRC="/app/mosquitto.conf"
-  MOSQUITTO_CONF_DEST="/config/mosquitto.conf"
-  if [ -f "$MOSQUITTO_CONF_SRC" ]; then
-    cp "$MOSQUITTO_CONF_SRC" "$MOSQUITTO_CONF_DEST"
-    bashio::log.info "Copied $MOSQUITTO_CONF_SRC to $MOSQUITTO_CONF_DEST."
-  else
-    bashio::log.error "Custom mosquitto.conf not found at $MOSQUITTO_CONF_SRC. Skipping MQTT integration config."
-  fi
-}
-setup_mqtt_statestream() {
-  bashio::log.info "Setting up MQTT Statestream integration..."
-  BASE_TOPIC=$(bashio::config 'mqtt_statestream_base_topic')
+setup_mqtt_sensors() {
+  bashio::log.info "Setting up MQTT sensor integration for community topics..."
   CONFIG_PATH="/config/configuration.yaml"
 
-  if grep -q "^mqtt_statestream:" "$CONFIG_PATH"; then
-    bashio::log.info "mqtt_statestream section found in $CONFIG_PATH. Updating base_topic..."
-    # If base_topic exists, replace it; otherwise, add it under mqtt_statestream
-    if grep -A 5 "^mqtt_statestream:" "$CONFIG_PATH" | grep -q "base_topic:"; then
-      sed -i "/^mqtt_statestream:/,/^[^ ]/ s|^  base_topic:.*|  base_topic: $BASE_TOPIC|" "$CONFIG_PATH"
-      bashio::log.info "Updated existing base_topic in mqtt_statestream section."
+  # Extract base topic without wildcard for sensor configuration
+  BASE_TOPIC=$(echo "$COMMUNITY_TOPIC" | sed 's/#$//' | sed 's|/$||')
+
+  # Check if mqtt sensor section exists
+  if grep -q "^mqtt:" "$CONFIG_PATH"; then
+    bashio::log.info "MQTT section found in configuration.yaml"
+
+    # Check if sensor subsection exists under mqtt
+    if grep -A 10 "^mqtt:" "$CONFIG_PATH" | grep -q "^  sensor:"; then
+      bashio::log.info "MQTT sensor section already exists"
     else
-      # Add base_topic under mqtt_statestream
-      sed -i "/^mqtt_statestream:/a \\  base_topic: $BASE_TOPIC" "$CONFIG_PATH"
-      bashio::log.info "Added base_topic to existing mqtt_statestream section."
+      # Add sensor section under mqtt
+      bashio::log.info "Adding sensor section under mqtt"
+      sed -i "/^mqtt:/a \\  sensor:" "$CONFIG_PATH"
     fi
   else
-    bashio::log.info "mqtt_statestream section not found. Appending new section to $CONFIG_PATH."
-    echo -e "\nmqtt_statestream:\n  base_topic: $BASE_TOPIC\n  publish_attributes: true\n  publish_timestamps: true" >> "$CONFIG_PATH"
+    # Add entire mqtt section with sensor
+    bashio::log.info "Adding mqtt and sensor section to configuration.yaml"
+    cat >> "$CONFIG_PATH" <<EOF
+
+mqtt:
+  sensor:
+    - name: "Community Topics Auto-Discovery"
+      state_topic: "${BASE_TOPIC}status"
+      value_template: "{{ value }}"
+EOF
   fi
+
+  bashio::log.info "MQTT sensor integration configured. Sensors will auto-discover from community topics."
+  bashio::log.info "Note: Individual sensors need to be defined manually or via MQTT discovery protocol."
 }
 
-setup_service_call_automation() {
-  bashio::log.info "Setting up service call automation..."
-  AUTOMATION_FILE="/app/automation.json"
-  if [ ! -f "$AUTOMATION_FILE" ]; then
-    bashio::log.info "Automation file $AUTOMATION_FILE not found. Skipping."
-    return
-  fi
-  # Validate automation.json
-  if ! jq empty "$AUTOMATION_FILE" 2>/dev/null; then
-    bashio::log.error "automation.json is not valid JSON. Skipping automation setup."
-    return
-  fi
-  AUTOMATIONS=$(cat "$AUTOMATION_FILE")
-  echo "Automations file"
-  echo "$AUTOMATIONS"
-  # Check for existing automation in automations.yaml instead of API
-  AUTOMATIONS_YAML="/config/automations.yaml"
-  if [ -f "$AUTOMATIONS_YAML" ]; then
-    if grep -q 'id: grexx-services' "$AUTOMATIONS_YAML"; then
-      bashio::log.info "Service call automation already exists in automations.yaml."
-      return
-    fi
-  else
-    bashio::log.warning "automations.yaml not found at $AUTOMATIONS_YAML. Skipping existence check."
-  fi
+setup_helper_listener() {
+  bashio::log.info "Starting MQTT helper listener for community topics..."
 
-  # Extract the first automation object from the array
-  AUTOMATION_OBJ=$(jq '.[0]' "$AUTOMATION_FILE")
-
-  RESULT=$(curl -s -X POST \
-    -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
-    -H "Content-Type: application/json" \
-    "$SUPERVISOR_API/config/automation/config/grexx-service" \
-    -d "$AUTOMATION_OBJ")
-  bashio::log.info "$RESULT"
-  bashio::log.info "Service call automation created."
+  # Start background process to listen to MQTT and create helpers
+  /app/mqtt_helper_listener.sh &
+  LISTENER_PID=$!
+  bashio::log.info "MQTT helper listener started with PID: $LISTENER_PID"
 }
 
 if wait_for_ha; then
-  setup_mqtt_statestream
-  setup_service_call_automation
+  bashio::log.info "Home Assistant API is ready."
 else
-  bashio::log.info "Could not connect to Home Assistant, exiting."
+  bashio::log.error "Could not connect to Home Assistant. Community topic processing may fail."
 fi
-# --- End Bash logic ---
 
 
 # Wait for mosquitto to start before continuing
@@ -271,65 +218,11 @@ else
     bashio::log.error "Service message to Supervisor failed!"
 fi
 
-# Get MQTT Statestream enabled flag from config
-MQTT_STATESTREAM_ENABLED=$(bashio::config 'mqtt_statestream_initial_push_enabled')
-
-publish_entity_states_to_mqtt() {
-  BASE_TOPIC=$(bashio::config 'mqtt_statestream_base_topic')
-  ENTITY_STATES=$(curl -s -X GET \
-    -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
-    -H "Content-Type: application/json" \
-    "$SUPERVISOR_API/states")
-
-  # SSL/TLS options for mosquitto_pub if using port 8883
-  MQTT_SSL_OPTIONS=""
-  if [ "$ENERGYBOXX_PORT" = "8883" ]; then
-    CA_FILE="/config/ssl/grexxconnect_ca.crt"
-    CERT_FILE="/config/ssl/grexxconnect_client.crt"
-    KEY_FILE="/config/ssl/grexxconnect_client.key"
-    MQTT_CLIENT_CERT_OPTIONAL=$(bashio::config 'mqtt_client_cert_optional')
-    if [ -f "$CA_FILE" ]; then
-      MQTT_SSL_OPTIONS="$MQTT_SSL_OPTIONS --cafile $CA_FILE"
-    fi
-    if [ "$MQTT_CLIENT_CERT_OPTIONAL" = "false" ]; then
-      if [ -f "$CERT_FILE" ]; then
-        MQTT_SSL_OPTIONS="$MQTT_SSL_OPTIONS --cert $CERT_FILE"
-      fi
-      if [ -f "$KEY_FILE" ]; then
-        MQTT_SSL_OPTIONS="$MQTT_SSL_OPTIONS --key $KEY_FILE"
-      fi
-    fi
-  fi
-
-  echo "$ENTITY_STATES" | jq -c '.[]' | while read -r entity; do
-    ENTITY_ID=$(echo "$entity" | jq -r '.entity_id')
-    ENTITY_TOPIC=$(echo "$ENTITY_ID" | tr '.' '/' | tr -cd '[:alnum:]/:_-')
-    ENTITY_TOPIC=$(echo "$ENTITY_TOPIC" | sed 's,//*,/,g' | sed 's,^/,,' | sed 's,/$,,')
-    STATE=$(echo "$entity" | jq -r '.state')
-    LAST_UPDATED=$(echo "$entity" | jq -r '.last_updated')
-
-    bashio::log.info "Publishing state for $ENTITY_ID: $STATE (last updated: $LAST_UPDATED) at topic $BASE_TOPIC/$ENTITY_TOPIC/state"
-    CMD="mosquitto_pub -h \"$ENERGYBOXX_HOST\" -p \"$ENERGYBOXX_PORT\" -u \"$ENERGYBOXX_USER\" -P \"$ENERGYBOXX_PASSWORD\" $MQTT_SSL_OPTIONS -t \"$BASE_TOPIC/$ENTITY_TOPIC/state\" -m \"$STATE\""
-    bashio::log.info "Running: $CMD"
-    eval $CMD
-    if [ $? -ne 0 ]; then
-      bashio::log.error "Failed to publish state for $ENTITY_ID to topic $BASE_TOPIC/$ENTITY_TOPIC/state"
-    fi
-    CMD="mosquitto_pub -h \"$ENERGYBOXX_HOST\" -p \"$ENERGYBOXX_PORT\" -u \"$ENERGYBOXX_USER\" -P \"$ENERGYBOXX_PASSWORD\" $MQTT_SSL_OPTIONS -t \"$BASE_TOPIC/$ENTITY_TOPIC/last_updated\" -m \"$LAST_UPDATED\""
-    bashio::log.info "Running: $CMD"
-    eval $CMD
-    if [ $? -ne 0 ]; then
-      bashio::log.error "Failed to publish last_updated for $ENTITY_ID to topic $BASE_TOPIC/$ENTITY_TOPIC/last_updated"
-    fi
-  done
-  bashio::log.info "Finished publishing entity states to MQTT."
-}
-
-if bashio::var.true "$MQTT_STATESTREAM_ENABLED"; then
-  bashio::log.info "Publishing entity states to MQTT Statestream..."
-  publish_entity_states_to_mqtt
+# Process community topics based on feature flag
+if bashio::var.true "$USE_MQTT_SENSORS"; then
+  setup_mqtt_sensors
 else
-  bashio::log.info "MQTT Statestream publishing is disabled by configuration."
+  setup_helper_listener
 fi
 
 # Keep the container running
