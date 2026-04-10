@@ -60,14 +60,14 @@ topic_to_entity_id() {
   local topic="$1"
   local base_topic="$COMMUNITY_TOPIC"
 
-  # Remove the wildcard from base topic to get the prefix
-  local topic_prefix=$(echo "$base_topic" | sed 's|/#$||')
+  # Remove the wildcard (+, #) from base topic to get the prefix
+  local topic_prefix=$(echo "$base_topic" | sed 's|/+$||' | sed 's|/#$||')
 
   # Remove the base topic prefix from the full topic to get just the subtopic
   local subtopic=$(echo "$topic" | sed "s|^${topic_prefix}/||")
 
-  # Clean up the subtopic name: remove invalid characters, keep alphanumeric and underscore
-  local entity_name=$(echo "$subtopic" | tr -cd '[:alnum:]_')
+  # Clean up the subtopic name: replace / with _, keep alphanumeric and underscore
+  local entity_name=$(echo "$subtopic" | tr '/' '_' | tr -cd '[:alnum:]_')
 
   # If entity_name is empty, use a default
   if [ -z "$entity_name" ]; then
@@ -104,8 +104,10 @@ create_helper() {
   # Check if input_text section exists in configuration.yaml
   if ! grep -q "^input_text:" "$CONFIG_PATH"; then
     bashio::log.info "  Adding input_text section to configuration.yaml"
-    echo "" >> "$CONFIG_PATH"
-    echo "input_text:" >> "$CONFIG_PATH"
+    cat >> "$CONFIG_PATH" <<EOF
+
+input_text:
+EOF
   fi
 
   # Check if this specific helper already exists in config
@@ -115,13 +117,29 @@ create_helper() {
     return 0
   fi
 
-  # Add helper to configuration.yaml
+  # Add helper to configuration.yaml with proper indentation
   bashio::log.info "  Adding helper to configuration.yaml"
-  cat >> "$CONFIG_PATH" <<EOF
+
+  # Create a temporary file with the new helper entry
+  TEMP_FILE=$(mktemp)
+  cat >> "$TEMP_FILE" <<EOF
   ${helper_key}:
     name: "${helper_name}"
     max: 255
 EOF
+
+  # Find the line number of input_text: and insert after it
+  LINE_NUM=$(grep -n "^input_text:" "$CONFIG_PATH" | cut -d: -f1)
+  if [ -n "$LINE_NUM" ]; then
+    # Insert the content after the input_text: line
+    head -n "$LINE_NUM" "$CONFIG_PATH" > "${CONFIG_PATH}.tmp"
+    cat "$TEMP_FILE" >> "${CONFIG_PATH}.tmp"
+    tail -n +"$((LINE_NUM + 1))" "$CONFIG_PATH" >> "${CONFIG_PATH}.tmp"
+    mv "${CONFIG_PATH}.tmp" "$CONFIG_PATH"
+  fi
+  rm -f "$TEMP_FILE"
+
+  bashio::log.info "  Helper definition added to YAML"
 
   # Reload input_text integration
   bashio::log.info "  Reloading input_text integration..."
@@ -224,8 +242,16 @@ $MQTT_CMD 2>&1 | while read -r line; do
   bashio::log.info "╚════════════════════════════════════════╝"
 
   # Convert topic to entity_id
+  # Debug: show the base topic being used for stripping
+  BASE_PREFIX=$(echo "$COMMUNITY_TOPIC" | sed 's|/+$||' | sed 's|/#$||')
+  bashio::log.info "Topic transformation:"
+  bashio::log.info "  Full topic: $TOPIC"
+  bashio::log.info "  Base prefix: $BASE_PREFIX"
+  SUBTOPIC=$(echo "$TOPIC" | sed "s|^${BASE_PREFIX}/||")
+  bashio::log.info "  Subtopic: $SUBTOPIC"
+
   ENTITY_ID=$(topic_to_entity_id "$TOPIC")
-  bashio::log.info "Converted to entity ID: $ENTITY_ID"
+  bashio::log.info "  → Entity ID: $ENTITY_ID"
 
   # Create helper if it doesn't exist
   if ! grep -q "^${ENTITY_ID}$" "$HELPERS_FILE"; then
