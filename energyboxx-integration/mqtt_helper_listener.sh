@@ -12,7 +12,30 @@ HELPERS_FILE="/data/created_helpers.txt"
 mkdir -p /data
 touch "$HELPERS_FILE"
 
-bashio::log.info "Listening on topic: $COMMUNITY_TOPIC on local broker (127.0.0.1:1885)"
+bashio::log.info "========================================="
+bashio::log.info "MQTT Helper Listener Configuration:"
+bashio::log.info "  Topic: $COMMUNITY_TOPIC"
+bashio::log.info "  Broker: 127.0.0.1:1885"
+bashio::log.info "  API: $SUPERVISOR_API"
+bashio::log.info "  Token: ${SUPERVISOR_TOKEN:0:20}..."
+bashio::log.info "  Helpers file: $HELPERS_FILE"
+bashio::log.info "========================================="
+
+# Test API connectivity
+bashio::log.info "Testing Home Assistant API connectivity..."
+API_TEST=$(curl -s -o /dev/null -w "%{http_code}" \
+  -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
+  -H "Content-Type: application/json" \
+  "$SUPERVISOR_API/config" 2>&1)
+
+if [ "$API_TEST" = "200" ]; then
+  bashio::log.info "✓ API connectivity test successful (HTTP $API_TEST)"
+else
+  bashio::log.error "✗ API connectivity test failed (HTTP $API_TEST)"
+  bashio::log.error "Helper creation will likely fail. Check add-on permissions."
+fi
+
+bashio::log.info "Waiting for MQTT messages on topic: $COMMUNITY_TOPIC"
 
 # Function to convert topic to entity_id
 topic_to_entity_id() {
@@ -24,39 +47,72 @@ topic_to_entity_id() {
   echo "input_text.community_${entity_name}"
 }
 
-# Function to create input_text helper
+# Function to create input_text helper in configuration.yaml
 create_helper() {
   local entity_id="$1"
   local topic="$2"
 
   # Check if already created
   if grep -q "^${entity_id}$" "$HELPERS_FILE"; then
+    bashio::log.debug "Helper already exists: $entity_id (skipping creation)"
     return 0
   fi
 
-  bashio::log.info "Creating helper: $entity_id for topic: $topic"
+  bashio::log.info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  bashio::log.info "Creating new helper:"
+  bashio::log.info "  Entity ID: $entity_id"
+  bashio::log.info "  Topic: $topic"
 
-  # Extract helper name from entity_id
-  local helper_name=$(echo "$entity_id" | sed 's/input_text\.//' | tr '_' ' ')
+  # Extract helper name and key from entity_id
+  local helper_key=$(echo "$entity_id" | sed 's/input_text\.//')
+  local helper_name=$(echo "$helper_key" | tr '_' ' ')
+  bashio::log.info "  Helper Key: $helper_key"
+  bashio::log.info "  Display Name: $helper_name"
 
-  # Create input_text helper via HA REST API
-  RESPONSE=$(curl -s -X POST \
-    -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
-    -H "Content-Type: application/json" \
-    "$SUPERVISOR_API/services/input_text/create" \
-    -d "{
-      \"name\": \"${helper_name}\",
-      \"min\": 0,
-      \"max\": 255,
-      \"initial\": \"\"
-    }")
+  CONFIG_PATH="/config/configuration.yaml"
 
-  if [ $? -eq 0 ]; then
-    bashio::log.info "Helper created: $entity_id"
+  # Check if input_text section exists in configuration.yaml
+  if ! grep -q "^input_text:" "$CONFIG_PATH"; then
+    bashio::log.info "  Adding input_text section to configuration.yaml"
+    echo "" >> "$CONFIG_PATH"
+    echo "input_text:" >> "$CONFIG_PATH"
+  fi
+
+  # Check if this specific helper already exists in config
+  if grep -A 3 "^input_text:" "$CONFIG_PATH" | grep -q "^  ${helper_key}:"; then
+    bashio::log.warning "  Helper already exists in configuration.yaml"
     echo "$entity_id" >> "$HELPERS_FILE"
     return 0
+  fi
+
+  # Add helper to configuration.yaml
+  bashio::log.info "  Adding helper to configuration.yaml"
+  cat >> "$CONFIG_PATH" <<EOF
+  ${helper_key}:
+    name: "${helper_name}"
+    max: 255
+EOF
+
+  # Reload input_text integration
+  bashio::log.info "  Reloading input_text integration..."
+  RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST \
+    -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
+    -H "Content-Type: application/json" \
+    "$SUPERVISOR_API/services/input_text/reload")
+
+  HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
+  BODY=$(echo "$RESPONSE" | sed '/HTTP_CODE:/d')
+
+  if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
+    bashio::log.info "✓ Helper created and reloaded successfully (HTTP $HTTP_CODE)"
+    echo "$entity_id" >> "$HELPERS_FILE"
+    bashio::log.info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    return 0
   else
-    bashio::log.error "Failed to create helper: $entity_id. Response: $RESPONSE"
+    bashio::log.error "✗ Failed to reload input_text integration (HTTP $HTTP_CODE)"
+    bashio::log.error "  Response: $BODY"
+    bashio::log.error "  Helper added to config but not loaded yet. Will retry."
+    bashio::log.error "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     return 1
   fi
 }
@@ -66,44 +122,81 @@ update_helper() {
   local entity_id="$1"
   local value="$2"
 
-  # Call input_text.set_value service
-  RESPONSE=$(curl -s -X POST \
+  # Truncate value if longer than 255 characters
+  if [ ${#value} -gt 255 ]; then
+    value="${value:0:255}"
+    bashio::log.warning "Value truncated to 255 characters"
+  fi
+
+  bashio::log.info "Updating helper: $entity_id = \"$value\""
+
+  # Call input_text.set_value service via REST API
+  local payload="{\"entity_id\": \"${entity_id}\", \"value\": \"${value}\"}"
+
+  RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST \
     -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
     -H "Content-Type: application/json" \
     "$SUPERVISOR_API/services/input_text/set_value" \
-    -d "{
-      \"entity_id\": \"${entity_id}\",
-      \"value\": \"${value}\"
-    }")
+    -d "$payload")
 
-  if [ $? -eq 0 ]; then
-    bashio::log.debug "Updated helper: $entity_id = $value"
+  HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
+  BODY=$(echo "$RESPONSE" | sed '/HTTP_CODE:/d')
+
+  if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
+    bashio::log.info "✓ Helper updated successfully"
     return 0
   else
-    bashio::log.error "Failed to update helper: $entity_id. Response: $RESPONSE"
+    bashio::log.error "✗ Failed to update helper (HTTP $HTTP_CODE)"
+    bashio::log.error "  Entity: $entity_id"
+    bashio::log.error "  Value: $value"
+    bashio::log.error "  Response: $BODY"
+    bashio::log.error "  This usually means the helper doesn't exist yet in Home Assistant"
     return 1
   fi
 }
 
 # Main loop: Subscribe to MQTT and process messages
-mosquitto_sub -h 127.0.0.1 -p 1885 -t "$COMMUNITY_TOPIC" -v | while read -r line; do
+bashio::log.info "Starting mosquitto_sub listener..."
+MESSAGE_COUNT=0
+
+mosquitto_sub -h 127.0.0.1 -p 1885 -t "$COMMUNITY_TOPIC" -v 2>&1 | while read -r line; do
+  MESSAGE_COUNT=$((MESSAGE_COUNT + 1))
+
+  # Check for mosquitto errors
+  if echo "$line" | grep -qi "error\|connection refused\|failed"; then
+    bashio::log.error "mosquitto_sub error: $line"
+    continue
+  fi
+
   # Parse topic and message (format: "topic message")
-  TOPIC=$(echo "$line" | cut -d' ' -f1)
+  TOPIC=$(echo "$line" | awk '{print $1}')
   MESSAGE=$(echo "$line" | cut -d' ' -f2-)
 
-  bashio::log.info "Received: [$TOPIC] = $MESSAGE"
+  bashio::log.info "╔════════════════════════════════════════╗"
+  bashio::log.info "║ MQTT Message #$MESSAGE_COUNT Received"
+  bashio::log.info "╠════════════════════════════════════════╣"
+  bashio::log.info "║ Topic:   $TOPIC"
+  bashio::log.info "║ Message: $MESSAGE"
+  bashio::log.info "╚════════════════════════════════════════╝"
 
   # Convert topic to entity_id
   ENTITY_ID=$(topic_to_entity_id "$TOPIC")
+  bashio::log.info "Converted to entity ID: $ENTITY_ID"
 
   # Create helper if it doesn't exist
   if ! grep -q "^${ENTITY_ID}$" "$HELPERS_FILE"; then
+    bashio::log.info "Helper does not exist, creating..."
     create_helper "$ENTITY_ID" "$TOPIC"
-    sleep 1  # Give HA time to create the entity
+    sleep 2  # Give HA time to create the entity
+  else
+    bashio::log.info "Helper already exists, updating value..."
   fi
 
   # Update helper value
   update_helper "$ENTITY_ID" "$MESSAGE"
+
+  bashio::log.info "----------------------------------------"
 done
 
-bashio::log.error "MQTT Helper Listener: Stopped unexpectedly"
+bashio::log.error "MQTT Helper Listener: mosquitto_sub exited unexpectedly"
+bashio::log.error "This usually means the MQTT broker stopped or the connection was lost"

@@ -65,6 +65,12 @@ if [ -f "$MOSQUITTO_CONF_SRC" ]; then
   sed -i "s|PASSWORD_REPLACE_TOKEN|$ENERGYBOXX_PASSWORD|g" "$MOSQUITTO_CONF_DEST"
   sed -i "s|CLIENT_ID_REPLACE_TOKEN|energyboxx-addon-$(hostname)-$ENERGYBOXX_USER|g" "$MOSQUITTO_CONF_DEST"
   sed -i "s|COMMUNITY_TOPIC_REPLACE_TOKEN|$COMMUNITY_TOPIC|g" "$MOSQUITTO_CONF_DEST"
+
+  bashio::log.info "Mosquitto configuration:"
+  bashio::log.info "  Remote broker: $ENERGYBOXX_HOST:$ENERGYBOXX_PORT"
+  bashio::log.info "  Username: $ENERGYBOXX_USER"
+  bashio::log.info "  Community topic: $COMMUNITY_TOPIC"
+  bashio::log.info "  Client ID: energyboxx-addon-$(hostname)-$ENERGYBOXX_USER"
 else
   bashio::log.error "mosquitto.conf not found at $MOSQUITTO_CONF_SRC."
 fi
@@ -77,9 +83,20 @@ bashio::log.info "CA certificate installed to /config/ssl/grexxconnect_ca.crt"
 
 
 # Start mosquitto with the updated config
-bashio::log.info "Starting mosquitto with updated configuration..."
+bashio::log.info "Starting mosquitto bridge..."
+bashio::log.info "Bridge will subscribe to: $COMMUNITY_TOPIC from $ENERGYBOXX_HOST"
 mosquitto -c /etc/mosquitto/mosquitto.conf &
+MOSQUITTO_PID=$!
+bashio::log.info "Mosquitto started with PID: $MOSQUITTO_PID"
 sleep 5
+
+# Check if mosquitto is still running
+if ps -p $MOSQUITTO_PID > /dev/null; then
+  bashio::log.info "✓ Mosquitto is running"
+else
+  bashio::log.error "✗ Mosquitto failed to start or crashed immediately"
+  bashio::log.error "Check mosquitto logs above for connection errors"
+fi
 
 # --- Bash logic for Home Assistant API setup ---
 SUPERVISOR_API="${SUPERVISOR_API:-http://supervisor/core/api}"
@@ -207,6 +224,12 @@ else
 fi
 
 # Process community topics based on feature flag
+bashio::log.info "========================================="
+bashio::log.info "Community Topic Processing Configuration:"
+bashio::log.info "  Mode: $([ "$USE_MQTT_SENSORS" = "true" ] && echo "MQTT Sensors" || echo "Input Text Helpers (default)")"
+bashio::log.info "  Topic pattern: $COMMUNITY_TOPIC"
+bashio::log.info "========================================="
+
 if bashio::var.true "$USE_MQTT_SENSORS"; then
   setup_mqtt_sensors
 else
