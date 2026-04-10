@@ -9,6 +9,7 @@ ENERGYBOXX_USER=$(bashio::config 'energyboxx_mqtt_username')
 ENERGYBOXX_PASSWORD=$(bashio::config 'energyboxx_mqtt_password')
 COMMUNITY_TOPIC=$(bashio::config 'community_topic')
 USE_MQTT_SENSORS=$(bashio::config 'use_mqtt_sensors')
+USE_MQTT_BRIDGE=$(bashio::config 'use_mqtt_bridge')
 
 # Resolve broker IP using system DNS (not Tailscale DNS)
 BROKER_IP=$(getent hosts "$ENERGYBOXX_HOST" | awk '{ print $1 }')
@@ -49,72 +50,78 @@ else
   bashio::log.info "Tailscale is disabled by configuration; skipping Tailscale setup."
 fi
 
-# Create mosquitto bridge configuration
-bashio::log.info "Creating mosquitto bridge configuration..."
-mkdir -p /etc/mosquitto/conf.d
-
-# Replace tokens in mosquitto.conf with values from options
-MOSQUITTO_CONF_SRC="/app/mosquitto.conf"
-MOSQUITTO_CONF_DEST="/etc/mosquitto/mosquitto.conf"
-
-if [ -f "$MOSQUITTO_CONF_SRC" ]; then
-  bashio::log.info "Configuring mosquitto.conf for broker..."
-  cp "$MOSQUITTO_CONF_SRC" "$MOSQUITTO_CONF_DEST"
-  sed -i "s|HOST_REPLACE_TOKEN|$ENERGYBOXX_HOST|g" "$MOSQUITTO_CONF_DEST"
-  sed -i "s|USERNAME_REPLACE_TOKEN|$ENERGYBOXX_USER|g" "$MOSQUITTO_CONF_DEST"
-  sed -i "s|PASSWORD_REPLACE_TOKEN|$ENERGYBOXX_PASSWORD|g" "$MOSQUITTO_CONF_DEST"
-  sed -i "s|CLIENT_ID_REPLACE_TOKEN|energyboxx-addon-$(hostname)-$ENERGYBOXX_USER|g" "$MOSQUITTO_CONF_DEST"
-  sed -i "s|COMMUNITY_TOPIC_REPLACE_TOKEN|$COMMUNITY_TOPIC|g" "$MOSQUITTO_CONF_DEST"
-
-  bashio::log.info "Mosquitto configuration:"
-  bashio::log.info "  Remote broker: $ENERGYBOXX_HOST:$ENERGYBOXX_PORT"
-  bashio::log.info "  Username: $ENERGYBOXX_USER"
-  bashio::log.info "  Community topic: $COMMUNITY_TOPIC"
-  bashio::log.info "  Client ID: energyboxx-addon-$(hostname)-$ENERGYBOXX_USER"
-else
-  bashio::log.error "mosquitto.conf not found at $MOSQUITTO_CONF_SRC."
-fi
-
-# Copy CA certificate for TLS verification
+# Copy CA certificate for TLS verification (needed for both bridge and direct connection)
 bashio::log.info "Copying CA certificate for TLS verification..."
 mkdir -p /config/ssl
 cp /app/ca.crt /config/ssl/grexxconnect_ca.crt
 bashio::log.info "CA certificate installed to /config/ssl/grexxconnect_ca.crt"
 
+# Conditionally start mosquitto bridge based on feature flag
+if bashio::var.true "$USE_MQTT_BRIDGE"; then
+  bashio::log.info "========================================="
+  bashio::log.info "MQTT Bridge: ENABLED"
+  bashio::log.info "========================================="
 
-# Start mosquitto with the updated config
-bashio::log.info "Starting mosquitto bridge..."
-bashio::log.info "Bridge will subscribe to: $COMMUNITY_TOPIC from $ENERGYBOXX_HOST"
-mosquitto -c /etc/mosquitto/mosquitto.conf &
-MOSQUITTO_PID=$!
-bashio::log.info "Mosquitto started with PID: $MOSQUITTO_PID"
-sleep 5
+  # Create mosquitto bridge configuration
+  bashio::log.info "Creating mosquitto bridge configuration..."
+  mkdir -p /etc/mosquitto/conf.d
 
-# Check if mosquitto is still running
-if ps -p $MOSQUITTO_PID > /dev/null; then
-  bashio::log.info "✓ Mosquitto is running"
+  # Replace tokens in mosquitto.conf with values from options
+  MOSQUITTO_CONF_SRC="/app/mosquitto.conf"
+  MOSQUITTO_CONF_DEST="/etc/mosquitto/mosquitto.conf"
+
+  if [ -f "$MOSQUITTO_CONF_SRC" ]; then
+    bashio::log.info "Configuring mosquitto.conf for broker..."
+    cp "$MOSQUITTO_CONF_SRC" "$MOSQUITTO_CONF_DEST"
+    sed -i "s|HOST_REPLACE_TOKEN|$ENERGYBOXX_HOST|g" "$MOSQUITTO_CONF_DEST"
+    sed -i "s|USERNAME_REPLACE_TOKEN|$ENERGYBOXX_USER|g" "$MOSQUITTO_CONF_DEST"
+    sed -i "s|PASSWORD_REPLACE_TOKEN|$ENERGYBOXX_PASSWORD|g" "$MOSQUITTO_CONF_DEST"
+    sed -i "s|CLIENT_ID_REPLACE_TOKEN|energyboxx-addon-$(hostname)-$ENERGYBOXX_USER|g" "$MOSQUITTO_CONF_DEST"
+    sed -i "s|COMMUNITY_TOPIC_REPLACE_TOKEN|$COMMUNITY_TOPIC|g" "$MOSQUITTO_CONF_DEST"
+
+    bashio::log.info "Mosquitto configuration:"
+    bashio::log.info "  Remote broker: $ENERGYBOXX_HOST:$ENERGYBOXX_PORT"
+    bashio::log.info "  Username: $ENERGYBOXX_USER"
+    bashio::log.info "  Community topic: $COMMUNITY_TOPIC"
+    bashio::log.info "  Client ID: energyboxx-addon-$(hostname)-$ENERGYBOXX_USER"
+  else
+    bashio::log.error "mosquitto.conf not found at $MOSQUITTO_CONF_SRC."
+  fi
+
+  # Start mosquitto with the updated config
+  bashio::log.info "Starting mosquitto bridge..."
+  bashio::log.info "Bridge will subscribe to: $COMMUNITY_TOPIC from $ENERGYBOXX_HOST"
+  mosquitto -c /etc/mosquitto/mosquitto.conf &
+  MOSQUITTO_PID=$!
+  bashio::log.info "Mosquitto started with PID: $MOSQUITTO_PID"
+  sleep 5
+
+  # Check if mosquitto is still running
+  if ps -p $MOSQUITTO_PID > /dev/null; then
+    bashio::log.info "✓ Mosquitto bridge is running"
+  else
+    bashio::log.error "✗ Mosquitto failed to start or crashed immediately"
+    bashio::log.error "Check mosquitto logs above for connection errors"
+  fi
+
+  # Wait for mosquitto to start before continuing
+  bashio::net.wait_for 1885
 else
-  bashio::log.error "✗ Mosquitto failed to start or crashed immediately"
-  bashio::log.error "Check mosquitto logs above for connection errors"
+  bashio::log.info "========================================="
+  bashio::log.info "MQTT Bridge: DISABLED"
+  bashio::log.info "Using direct connection to remote broker"
+  bashio::log.info "========================================="
 fi
 
-# --- Bash logic for Home Assistant API setup ---
+# --- Home Assistant API setup ---
 SUPERVISOR_API="${SUPERVISOR_API:-http://supervisor/core/api}"
 SUPERVISOR_TOKEN="${SUPERVISOR_TOKEN}"
-CURL_AUTH_HEADER="-H \"Authorization: Bearer $SUPERVISOR_TOKEN\""
-CURL_JSON_HEADER="-H \"Content-Type: application/json\""
 
-# Debug: Print first 8 characters of SUPERVISOR_TOKEN for verification
 if [ -z "$SUPERVISOR_TOKEN" ]; then
   bashio::log.warning "SUPERVISOR_TOKEN is not set! API calls will fail."
 else
   bashio::log.info "SUPERVISOR_TOKEN is set."
 fi
-
-# Check if the Supervisor API is reachable
-bashio::log.info "Checking Supervisor API configuration..."
-SUPERVISOR_API_RESPONSE=$(curl -s -X GET -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" -H "Content-Type: application/json" http://supervisor/core/api/config)
-bashio::log.info "Supervisor API response: $SUPERVISOR_API_RESPONSE"
 
 wait_for_ha() {
   for i in $(seq 1 10); do
@@ -189,38 +196,37 @@ else
   bashio::log.error "Could not connect to Home Assistant. Community topic processing may fail."
 fi
 
+# Only publish MQTT service if bridge is enabled
+if bashio::var.true "$USE_MQTT_BRIDGE"; then
+  # Create discovery config payload for Home Assistant
+  config=$(bashio::var.json \
+      host "$(hostname)" \
+      port "^1885" \
+      ssl "^false" \
+      protocol "3.1.1" \
+  )
 
-# Wait for mosquitto to start before continuing
-bashio::net.wait_for 1885
+  # Send discovery info
+  if bashio::discovery "Energyboxx Integration" "${config}" > /dev/null; then
+      bashio::log.info "Successfully send discovery information to Home Assistant."
+  else
+      bashio::log.error "Discovery message to Home Assistant failed!"
+  fi
 
-# Create discovery config payload for Home Assistant
-config=$(bashio::var.json \
-    host "$(hostname)" \
-    port "^1885" \
-    ssl "^false" \
-    protocol "3.1.1" \
-)
+  # Create service config payload for other add-ons
+  config=$(bashio::var.json \
+      host "$(hostname)" \
+      port "^1885" \
+      ssl "^false" \
+      protocol "3.1.1" \
+  )
 
-# Send discovery info
-if bashio::discovery "Energyboxx Integration" "${config}" > /dev/null; then
-    bashio::log.info "Successfully send discovery information to Home Assistant."
-else
-    bashio::log.error "Discovery message to Home Assistant failed!"
-fi
-
-# Create service config payload for other add-ons
-config=$(bashio::var.json \
-    host "$(hostname)" \
-    port "^1885" \
-    ssl "^false" \
-    protocol "3.1.1" \
-)
-
-# Send service info
-if bashio::services.publish "Energyboxx Integration" "${config}" > /dev/null 2>&1; then
-    bashio::log.info "Successfully send service information to the Supervisor."
-else
-    bashio::log.error "Service message to Supervisor failed!"
+  # Send service info
+  if bashio::services.publish "Energyboxx Integration" "${config}" > /dev/null 2>&1; then
+      bashio::log.info "Successfully send service information to the Supervisor."
+  else
+      bashio::log.error "Service message to Supervisor failed!"
+  fi
 fi
 
 # Process community topics based on feature flag

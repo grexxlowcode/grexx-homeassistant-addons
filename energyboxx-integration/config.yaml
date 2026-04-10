@@ -1,6 +1,6 @@
 name: "Energyboxx Integration"
-description: "Integration for Energyboxx with MQTT bridge and service automation"
-version: "1.0.36"
+description: "Integration for Energyboxx with MQTT community topic subscription"
+version: "1.0.37"
 slug: "energyboxx"
 init: false
 arch:
@@ -17,6 +17,7 @@ options:
   energyboxx_mqtt_password: ""
   community_topic: "community/#"
   use_mqtt_sensors: false
+  use_mqtt_bridge: false
   tailscale_authkey: ""
   tailscale_enabled: false
 schema:
@@ -26,6 +27,7 @@ schema:
   energyboxx_mqtt_password: str
   community_topic: str
   use_mqtt_sensors: bool
+  use_mqtt_bridge: bool
   tailscale_authkey: str?
   tailscale_enabled: bool
 logs: true
@@ -42,7 +44,6 @@ services:
 discovery:
   - mqtt
 startup: system
-watchdog: tcp://[HOST]:1885
 privileged:
   - NET_ADMIN
   - NET_RAW
