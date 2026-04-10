@@ -69,23 +69,11 @@ else
   bashio::log.error "mosquitto.conf not found at $MOSQUITTO_CONF_SRC."
 fi
 
-# Write CA certificate for TLS verification
-MQTT_CLIENT_CAFILE_B64=$(bashio::config 'mqtt_client_cafile_b64')
-
-# Ensure /config/ssl directory exists
+# Copy CA certificate for TLS verification
+bashio::log.info "Copying CA certificate for TLS verification..."
 mkdir -p /config/ssl
-
-# Write CA file from base64 if provided
-if [ -n "$MQTT_CLIENT_CAFILE_B64" ]; then
-  bashio::log.info "Decoding and writing CA file to /config/ssl/grexxconnect_ca.crt"
-  echo "$MQTT_CLIENT_CAFILE_B64" | base64 -d > /config/ssl/grexxconnect_ca.crt
-else
-  bashio::log.warning "No CA file provided. TLS verification may fail."
-fi
-
-# Print SSL directory contents
-bashio::log.info "Contents of /config/ssl directory:"
-ls -l /config/ssl
+cp /app/ca.crt /config/ssl/grexxconnect_ca.crt
+bashio::log.info "CA certificate installed to /config/ssl/grexxconnect_ca.crt"
 
 
 # Start mosquitto with the updated config

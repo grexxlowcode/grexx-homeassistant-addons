@@ -10,6 +10,7 @@ COPY automation.json ./automation.json
 COPY statestream-config.yaml ./statestream-config.yaml
 COPY mosquitto.conf ./mosquitto.conf
 COPY mqtt_helper_listener.sh ./mqtt_helper_listener.sh
+COPY ca.crt ./ca.crt
 
 RUN chmod +x ./run.sh ./mqtt_helper_listener.sh
 

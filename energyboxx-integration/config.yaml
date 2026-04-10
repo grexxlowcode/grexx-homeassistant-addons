@@ -1,6 +1,6 @@
 name: "Energyboxx Integration"
 description: "Integration for Energyboxx with MQTT bridge and service automation"
-version: "1.0.30"
+version: "1.0.31"
 slug: "energyboxx"
 init: false
 arch:
@@ -15,7 +15,6 @@ options:
   energyboxx_mqtt_port: 8883
   energyboxx_mqtt_username: ""
   energyboxx_mqtt_password: ""
-  mqtt_client_cafile_b64: ""
   community_topic: "community/#"
   use_mqtt_sensors: false
   tailscale_authkey: ""
@@ -25,7 +24,6 @@ schema:
   energyboxx_mqtt_port: port
   energyboxx_mqtt_username: str
   energyboxx_mqtt_password: str
-  mqtt_client_cafile_b64: str?
   community_topic: str
   use_mqtt_sensors: bool
   tailscale_authkey: str?
