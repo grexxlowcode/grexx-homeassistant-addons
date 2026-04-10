@@ -186,11 +186,12 @@ if [ -f "$CA_CERT" ]; then
 fi
 
 # Add topic and verbose flag
-MQTT_CMD="$MQTT_CMD -t $COMMUNITY_TOPIC -v"
+MQTT_CMD="$MQTT_CMD -t '$COMMUNITY_TOPIC' -v"
 
 bashio::log.info "Executing: mosquitto_sub -h $ENERGYBOXX_HOST -p $ENERGYBOXX_PORT -u $ENERGYBOXX_USER -P *** --cafile $CA_CERT -t $COMMUNITY_TOPIC -v"
 
 $MQTT_CMD 2>&1 | while read -r line; do
+  bashio::log.debug "Received line from mosquitto_sub: $line"
   MESSAGE_COUNT=$((MESSAGE_COUNT + 1))
 
   # Check for mosquitto errors
