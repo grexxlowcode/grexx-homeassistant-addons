@@ -4,6 +4,10 @@ bashio::log.info "MQTT Helper Listener: Starting..."
 
 # Get configuration
 COMMUNITY_TOPIC=$(bashio::config 'community_topic')
+ENERGYBOXX_HOST=$(bashio::config 'energyboxx_mqtt_host')
+ENERGYBOXX_PORT=$(bashio::config 'energyboxx_mqtt_port')
+ENERGYBOXX_USER=$(bashio::config 'energyboxx_mqtt_username')
+ENERGYBOXX_PASSWORD=$(bashio::config 'energyboxx_mqtt_password')
 SUPERVISOR_API="${SUPERVISOR_API:-http://supervisor/core/api}"
 SUPERVISOR_TOKEN="${SUPERVISOR_TOKEN}"
 
@@ -12,10 +16,15 @@ HELPERS_FILE="/data/created_helpers.txt"
 mkdir -p /data
 touch "$HELPERS_FILE"
 
+# CA certificate path
+CA_CERT="/config/ssl/grexxconnect_ca.crt"
+
 bashio::log.info "========================================="
 bashio::log.info "MQTT Helper Listener Configuration:"
 bashio::log.info "  Topic: $COMMUNITY_TOPIC"
-bashio::log.info "  Broker: 127.0.0.1:1885"
+bashio::log.info "  Remote Broker: $ENERGYBOXX_HOST:$ENERGYBOXX_PORT"
+bashio::log.info "  Username: $ENERGYBOXX_USER"
+bashio::log.info "  CA Certificate: $CA_CERT"
 bashio::log.info "  API: $SUPERVISOR_API"
 bashio::log.info "  Token: ${SUPERVISOR_TOKEN:0:20}..."
 bashio::log.info "  Helpers file: $HELPERS_FILE"
@@ -35,7 +44,16 @@ else
   bashio::log.error "Helper creation will likely fail. Check add-on permissions."
 fi
 
-bashio::log.info "Waiting for MQTT messages on topic: $COMMUNITY_TOPIC"
+# Verify CA certificate exists
+if [ -f "$CA_CERT" ]; then
+  bashio::log.info "✓ CA certificate found"
+else
+  bashio::log.error "✗ CA certificate not found at $CA_CERT"
+  bashio::log.error "TLS connection will fail"
+fi
+
+bashio::log.info "Connecting directly to remote broker..."
+bashio::log.info "Subscribing to: $COMMUNITY_TOPIC"
 
 # Function to convert topic to entity_id
 topic_to_entity_id() {
@@ -156,10 +174,23 @@ update_helper() {
 }
 
 # Main loop: Subscribe to MQTT and process messages
-bashio::log.info "Starting mosquitto_sub listener..."
+bashio::log.info "Starting mosquitto_sub listener (connecting to remote broker)..."
 MESSAGE_COUNT=0
 
-mosquitto_sub -h 127.0.0.1 -p 1885 -t "$COMMUNITY_TOPIC" -v 2>&1 | while read -r line; do
+# Build mosquitto_sub command with TLS
+MQTT_CMD="mosquitto_sub -h $ENERGYBOXX_HOST -p $ENERGYBOXX_PORT -u $ENERGYBOXX_USER -P $ENERGYBOXX_PASSWORD"
+
+# Add TLS options
+if [ -f "$CA_CERT" ]; then
+  MQTT_CMD="$MQTT_CMD --cafile $CA_CERT"
+fi
+
+# Add topic and verbose flag
+MQTT_CMD="$MQTT_CMD -t $COMMUNITY_TOPIC -v"
+
+bashio::log.info "Executing: mosquitto_sub -h $ENERGYBOXX_HOST -p $ENERGYBOXX_PORT -u $ENERGYBOXX_USER -P *** --cafile $CA_CERT -t $COMMUNITY_TOPIC -v"
+
+$MQTT_CMD 2>&1 | while read -r line; do
   MESSAGE_COUNT=$((MESSAGE_COUNT + 1))
 
   # Check for mosquitto errors
