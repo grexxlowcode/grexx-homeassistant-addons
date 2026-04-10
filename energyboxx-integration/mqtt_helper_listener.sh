@@ -58,11 +58,23 @@ bashio::log.info "Subscribing to: $COMMUNITY_TOPIC"
 # Function to convert topic to entity_id
 topic_to_entity_id() {
   local topic="$1"
-  # Remove base community/ prefix if present
-  local entity_name=$(echo "$topic" | sed 's|^community/||')
-  # Replace / with _ and remove invalid characters
-  entity_name=$(echo "$entity_name" | tr '/' '_' | tr -cd '[:alnum:]_')
-  echo "input_text.community_${entity_name}"
+  local base_topic="$COMMUNITY_TOPIC"
+
+  # Remove the wildcard from base topic to get the prefix
+  local topic_prefix=$(echo "$base_topic" | sed 's|/#$||')
+
+  # Remove the base topic prefix from the full topic to get just the subtopic
+  local subtopic=$(echo "$topic" | sed "s|^${topic_prefix}/||")
+
+  # Clean up the subtopic name: remove invalid characters, keep alphanumeric and underscore
+  local entity_name=$(echo "$subtopic" | tr -cd '[:alnum:]_')
+
+  # If entity_name is empty, use a default
+  if [ -z "$entity_name" ]; then
+    entity_name="unknown"
+  fi
+
+  echo "input_text.${entity_name}"
 }
 
 # Function to create input_text helper in configuration.yaml
@@ -185,8 +197,8 @@ if [ -f "$CA_CERT" ]; then
   MQTT_CMD="$MQTT_CMD --cafile $CA_CERT"
 fi
 
-# Add topic and verbose flag
-MQTT_CMD="$MQTT_CMD -t '$COMMUNITY_TOPIC' -v"
+# Add topic and verbose flag (no quotes around topic to avoid parsing issues)
+MQTT_CMD="$MQTT_CMD -t $COMMUNITY_TOPIC -v"
 
 bashio::log.info "Executing: mosquitto_sub -h $ENERGYBOXX_HOST -p $ENERGYBOXX_PORT -u $ENERGYBOXX_USER -P *** --cafile $CA_CERT -t $COMMUNITY_TOPIC -v"
 
