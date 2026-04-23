@@ -1,6 +1,6 @@
 name: "Energyboxx Integration"
 description: "Integration for Energyboxx with MQTT community topic subscription"
-version: "1.0.37"
+version: "1.0.38"
 slug: "energyboxx"
 init: false
 arch:
