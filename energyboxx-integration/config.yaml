@@ -1,6 +1,6 @@
 name: "Energyboxx Integration"
 description: "Integration for Energyboxx with MQTT community topic subscription"
-version: "1.0.38"
+version: "1.0.39"
 slug: "energyboxx"
 init: false
 arch:
@@ -11,24 +11,24 @@ arch:
   - i386
 boot: auto
 options:
-  energyboxx_mqtt_host: "ess.grexxconnect.com"
-  energyboxx_mqtt_port: 8883
   energyboxx_mqtt_username: ""
   energyboxx_mqtt_password: ""
+  tailscale_authkey: ""
+  energyboxx_mqtt_host: "ess.grexxconnect.com"
+  energyboxx_mqtt_port: 8883
   community_topic: "community/#"
   use_mqtt_sensors: false
   use_mqtt_bridge: false
-  tailscale_authkey: ""
   tailscale_enabled: false
 schema:
+  energyboxx_mqtt_username: str
+  energyboxx_mqtt_password: password
+  tailscale_authkey: str?
   energyboxx_mqtt_host: str
   energyboxx_mqtt_port: port
-  energyboxx_mqtt_username: str
-  energyboxx_mqtt_password: str
   community_topic: str
   use_mqtt_sensors: bool
   use_mqtt_bridge: bool
-  tailscale_authkey: str?
   tailscale_enabled: bool
 logs: true
 homeassistant_api: true

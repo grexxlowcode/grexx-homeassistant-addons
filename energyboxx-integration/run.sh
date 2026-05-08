@@ -20,17 +20,15 @@ else
   echo "$BROKER_IP $ENERGYBOXX_HOST" >> /etc/hosts
 fi
 
-# Get Tailscale enabled flag from config
+# Tailscale activates when an authkey is provided OR the explicit flag is on
 TAILSCALE_ENABLED=$(bashio::config 'tailscale_enabled')
+TAILSCALE_AUTHKEY=$(bashio::config 'tailscale_authkey')
 
-if bashio::var.true "$TAILSCALE_ENABLED"; then
+if [ -n "$TAILSCALE_AUTHKEY" ] || bashio::var.true "$TAILSCALE_ENABLED"; then
   # Start tailscaled daemon in the background
   bashio::log.info "Starting tailscaled daemon..."
   tailscaled --state=/config/tailscale.state --socket=/run/tailscale/tailscaled.sock &
   sleep 3
-
-  # Get Tailscale authkey from config
-  TAILSCALE_AUTHKEY=$(bashio::config 'tailscale_authkey')
 
   if [ -n "$TAILSCALE_AUTHKEY" ]; then
     bashio::log.info "Running tailscale up with provided authkey..."
@@ -47,7 +45,7 @@ if bashio::var.true "$TAILSCALE_ENABLED"; then
   RESOLVED_IP=$(getent hosts "$ENERGYBOXX_HOST" | awk '{ print $1 }')
   bashio::log.info "Resolved $ENERGYBOXX_HOST to $RESOLVED_IP with tailscale active"
 else
-  bashio::log.info "Tailscale is disabled by configuration; skipping Tailscale setup."
+  bashio::log.info "No Tailscale authkey and Tailscale not enabled; skipping Tailscale setup."
 fi
 
 # Copy CA certificate for TLS verification (needed for both bridge and direct connection)

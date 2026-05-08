@@ -1,0 +1,28 @@
+configuration:
+  energyboxx_mqtt_username:
+    name: Energyboxx username
+    description: Your Energyboxx broker username (required).
+  energyboxx_mqtt_password:
+    name: Energyboxx password
+    description: Your Energyboxx broker password (required).
+  tailscale_authkey:
+    name: Tailscale auth key
+    description: Optional. Provide a Tailscale/headscale auth key to tunnel MQTT over Tailscale. Leave blank to disable.
+  energyboxx_mqtt_host:
+    name: "[Advanced] Broker host"
+    description: Advanced — only change for non-default deployments.
+  energyboxx_mqtt_port:
+    name: "[Advanced] Broker port"
+    description: Advanced — defaults to 8883 (TLS).
+  community_topic:
+    name: "[Advanced] Community topic"
+    description: Advanced — MQTT topic pattern to subscribe.
+  use_mqtt_bridge:
+    name: "[Advanced] Run local mosquitto bridge"
+    description: Advanced — expose remote topics on a local broker (port 1885).
+  use_mqtt_sensors:
+    name: "[Advanced] Use MQTT sensors instead of helpers"
+    description: Advanced — write MQTT sensor config instead of input_text helpers.
+  tailscale_enabled:
+    name: "[Advanced] Tailscale enabled"
+    description: Advanced — leave off; Tailscale auto-starts when an auth key is provided.

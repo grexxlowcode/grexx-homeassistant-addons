@@ -1,0 +1,28 @@
+configuration:
+  energyboxx_mqtt_username:
+    name: Energyboxx-gebruikersnaam
+    description: Je gebruikersnaam voor de Energyboxx-broker (verplicht).
+  energyboxx_mqtt_password:
+    name: Energyboxx-wachtwoord
+    description: Je wachtwoord voor de Energyboxx-broker (verplicht).
+  tailscale_authkey:
+    name: Tailscale-authsleutel
+    description: Optioneel. Geef een Tailscale/headscale-authsleutel op om MQTT via Tailscale te tunnelen. Laat leeg om uit te schakelen.
+  energyboxx_mqtt_host:
+    name: "[Geavanceerd] Broker-host"
+    description: Geavanceerd — alleen wijzigen voor niet-standaard installaties.
+  energyboxx_mqtt_port:
+    name: "[Geavanceerd] Broker-poort"
+    description: Geavanceerd — standaard 8883 (TLS).
+  community_topic:
+    name: "[Geavanceerd] Community-topic"
+    description: Geavanceerd — MQTT-topicpatroon waarop wordt geabonneerd.
+  use_mqtt_bridge:
+    name: "[Geavanceerd] Lokale mosquitto-bridge gebruiken"
+    description: Geavanceerd — stelt de externe topics beschikbaar op een lokale broker (poort 1885).
+  use_mqtt_sensors:
+    name: "[Geavanceerd] MQTT-sensoren in plaats van helpers"
+    description: Geavanceerd — schrijft MQTT-sensorconfig in plaats van input_text-helpers.
+  tailscale_enabled:
+    name: "[Geavanceerd] Tailscale ingeschakeld"
+    description: Geavanceerd — laat uit; Tailscale start automatisch zodra een authsleutel is opgegeven.
