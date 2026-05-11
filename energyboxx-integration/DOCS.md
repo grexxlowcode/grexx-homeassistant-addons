@@ -1,47 +1,31 @@
 # Energyboxx Integration — Documentation
 
-## Required options
+## Options
 
-| Option | Description |
-|---|---|
-| `energyboxx_mqtt_username` | Your Energyboxx broker username. |
-| `energyboxx_mqtt_password` | Your Energyboxx broker password. |
-
-## Optional
-
-| Option | Description |
-|---|---|
-| `tailscale_authkey` | Tailscale/headscale auth key. When set, Tailscale starts automatically and the broker is reached via the tunnel. |
-
-## Advanced
-
-These options are pre-filled and should only be changed when you know what you're doing.
-
-| Option | Default | Description |
+| Option | Required | Description |
 |---|---|---|
-| `energyboxx_mqtt_host` | `ess.grexxconnect.com` | Remote MQTT broker hostname. |
-| `energyboxx_mqtt_port` | `8883` | Remote MQTT broker port (TLS). |
-| `community_topic` | `community/#` | MQTT topic pattern subscribed to. |
-| `use_mqtt_bridge` | `false` | Run a local mosquitto bridge on `1885/tcp` exposing the remote topics locally. |
-| `use_mqtt_sensors` | `false` | Write MQTT sensor entries to `configuration.yaml` instead of using `input_text` helpers. |
-| `tailscale_enabled` | `false` | Force Tailscale on without an auth key (e.g. when state already persisted in `/config/tailscale.state`). Normally leave `false` — providing `tailscale_authkey` is enough. |
+| `energyboxx_mqtt_username` | yes | Your Energyboxx broker username. |
+| `energyboxx_mqtt_password` | yes | Your Energyboxx broker password. |
+| `community_topic` | yes | MQTT topic pattern to subscribe to (default `community/#`). |
+
+The broker host (`ess.grexxconnect.com`) and TLS port (`8883`) are fixed in the add-on.
 
 ## How it works
 
-By default the add-on:
+1. Connects to `ess.grexxconnect.com:8883` over TLS using the bundled CA certificate.
+2. Authenticates with the configured username and password.
+3. Subscribes to `community_topic`.
+4. For every MQTT message, sets the state of a Home Assistant sensor named `sensor.community_<subtopic>` via the Supervisor REST API.
 
-1. Resolves the remote broker over TLS (CA bundled in the image).
-2. If `tailscale_authkey` is set, starts `tailscaled` and authenticates against `https://headscale.grexx.io`.
-3. Subscribes to `community_topic` on the remote broker.
-4. For every message, creates or updates an `input_text.community_*` helper in Home Assistant via the Supervisor REST API.
+Topic transformation example:
 
-If `use_mqtt_bridge` is enabled, an additional local mosquitto instance bridges the remote broker on port `1885` so other add-ons can consume the same topics over plain MQTT.
+- `community/temp/sensor1` → `sensor.community_temp_sensor1`
+- `community/power/main` → `sensor.community_power_main`
 
-If `use_mqtt_sensors` is enabled, MQTT sensor configuration is written to `configuration.yaml` instead of the helper approach.
+Numeric values get the `state_class: measurement` attribute, so they show up as charts in Home Assistant.
 
 ## Troubleshooting
 
-- **Auth errors in log** — verify username/password.
-- **Cannot resolve broker** — check internet/DNS, or set `tailscale_authkey` if the broker is only reachable via Tailscale.
-- **Helpers not appearing** — confirm `homeassistant_api: true` (it is by default) and that the Supervisor token is being injected (visible in the log line `SUPERVISOR_TOKEN is set.`).
-- **Force recreation of helpers** — delete `/data/created_helpers.txt` inside the add-on and restart.
+- **Auth errors** — verify `energyboxx_mqtt_username` / `energyboxx_mqtt_password`.
+- **No entities appear** — check the add-on log for `mosquitto_sub` errors and confirm messages are arriving on the configured topic.
+- **TLS errors** — restart the add-on; the CA certificate is reinstalled to `/config/ssl/grexxconnect_ca.crt` on every start.
