@@ -179,13 +179,13 @@ EOF
   bashio::log.info "Note: Individual sensors need to be defined manually or via MQTT discovery protocol."
 }
 
-setup_helper_listener() {
-  bashio::log.info "Starting MQTT helper listener for community topics..."
+setup_sensor_listener() {
+  bashio::log.info "Starting MQTT sensor listener for community topics..."
 
-  # Start background process to listen to MQTT and create helpers
+  # Start background process to listen to MQTT and publish sensor states
   /app/mqtt_helper_listener.sh &
   LISTENER_PID=$!
-  bashio::log.info "MQTT helper listener started with PID: $LISTENER_PID"
+  bashio::log.info "MQTT sensor listener started with PID: $LISTENER_PID"
 }
 
 if wait_for_ha; then
@@ -230,14 +230,14 @@ fi
 # Process community topics based on feature flag
 bashio::log.info "========================================="
 bashio::log.info "Community Topic Processing Configuration:"
-bashio::log.info "  Mode: $([ "$USE_MQTT_SENSORS" = "true" ] && echo "MQTT Sensors" || echo "Input Text Helpers (default)")"
+bashio::log.info "  Mode: $([ "$USE_MQTT_SENSORS" = "true" ] && echo "MQTT Sensor Integration (configuration.yaml)" || echo "REST Sensor States (default)")"
 bashio::log.info "  Topic pattern: $COMMUNITY_TOPIC"
 bashio::log.info "========================================="
 
 if bashio::var.true "$USE_MQTT_SENSORS"; then
   setup_mqtt_sensors
 else
-  setup_helper_listener
+  setup_sensor_listener
 fi
 
 # Keep the container running
