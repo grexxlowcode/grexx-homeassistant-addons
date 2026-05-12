@@ -22,7 +22,7 @@ topic_to_entity_id() {
   if [ -z "$entity_name" ]; then
     entity_name="unknown"
   fi
-  echo "sensor.community_${entity_name}"
+  echo "sensor.${entity_name}"
 }
 
 is_numeric() {
@@ -45,7 +45,7 @@ update_sensor() {
   local topic="$3"
 
   local key="${entity_id#sensor.}"
-  local friendly_name=$(echo "${key#community_}" | tr '_' ' ')
+  local friendly_name=$(echo "${key}" | tr '_' ' ')
 
   local escaped_value=$(json_escape "$value")
   local escaped_topic=$(json_escape "$topic")
