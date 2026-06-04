@@ -8,3 +8,6 @@ configuration:
   community_topic:
     name: Community-topic
     description: MQTT-topicpatroon waarop wordt geabonneerd (standaard community/#).
+  flip_power_result_kw:
+    name: Vermogensresultaat omkeren (kW)
+    description: Vermenigvuldig sensor.power_result_kw met -1 zodat het teken voor import/export overeenkomt met de Home Assistant-conventie.

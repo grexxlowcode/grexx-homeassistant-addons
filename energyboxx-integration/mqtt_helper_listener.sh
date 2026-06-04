@@ -3,6 +3,7 @@
 bashio::log.info "MQTT Sensor Listener: Starting..."
 
 COMMUNITY_TOPIC=$(bashio::config 'community_topic')
+FLIP_POWER_RESULT_KW=$(bashio::config 'flip_power_result_kw')
 ENERGYBOXX_USER=$(bashio::config 'energyboxx_mqtt_username')
 ENERGYBOXX_PASSWORD=$(bashio::config 'energyboxx_mqtt_password')
 ENERGYBOXX_HOST="${ENERGYBOXX_HOST:-ess.grexxconnect.com}"
@@ -94,6 +95,18 @@ mosquitto_sub \
     bashio::log.info "MQTT $TOPIC = $MESSAGE"
 
     ENTITY_ID=$(topic_to_entity_id "$TOPIC")
+
+    if [ "$FLIP_POWER_RESULT_KW" = "true" ] && [ "$ENTITY_ID" = "sensor.power_result_kw" ] && is_numeric "$MESSAGE"; then
+      if [[ "$MESSAGE" =~ ^-?0+(\.0+)?$ ]]; then
+        :  # leave zero untouched, avoid "-0"
+      elif [[ "$MESSAGE" == -* ]]; then
+        MESSAGE="${MESSAGE#-}"
+      else
+        MESSAGE="-$MESSAGE"
+      fi
+      bashio::log.info "Flipped power_result_kw -> $MESSAGE"
+    fi
+
     update_sensor "$ENTITY_ID" "$MESSAGE" "$TOPIC"
   done
 

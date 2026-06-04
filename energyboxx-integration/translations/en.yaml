@@ -8,3 +8,6 @@ configuration:
   community_topic:
     name: Community topic
     description: MQTT topic pattern to subscribe to (default community/#).
+  flip_power_result_kw:
+    name: Flip power result (kW)
+    description: Multiply sensor.power_result_kw by -1 so import/export sign matches Home Assistant convention.
