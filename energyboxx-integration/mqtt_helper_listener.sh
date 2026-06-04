@@ -96,7 +96,7 @@ mosquitto_sub \
 
     ENTITY_ID=$(topic_to_entity_id "$TOPIC")
 
-    if [ "$FLIP_POWER_RESULT_KW" = "true" ] && [ "$ENTITY_ID" = "sensor.power_result_kw" ] && is_numeric "$MESSAGE"; then
+    if [ "$FLIP_POWER_RESULT_KW" = "true" ] && [ "$ENTITY_ID" = "sensor.community_power_result_kw" ] && is_numeric "$MESSAGE"; then
       if [[ "$MESSAGE" =~ ^-?0+(\.0+)?$ ]]; then
         :  # leave zero untouched, avoid "-0"
       elif [[ "$MESSAGE" == -* ]]; then
@@ -104,7 +104,7 @@ mosquitto_sub \
       else
         MESSAGE="-$MESSAGE"
       fi
-      bashio::log.info "Flipped power_result_kw -> $MESSAGE"
+      bashio::log.info "Flipped community_power_result_kw -> $MESSAGE"
     fi
 
     update_sensor "$ENTITY_ID" "$MESSAGE" "$TOPIC"
