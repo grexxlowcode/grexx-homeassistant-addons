@@ -1,0 +1,151 @@
+{
+  "views": [
+    {
+      "type": "sections",
+      "title": "Flow params",
+      "max_columns": 2,
+      "sections": [
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "heading",
+              "heading": "Power flow",
+              "heading_style": "title",
+              "icon": "mdi:transmission-tower"
+            },
+            {
+              "type": "markdown",
+              "content": "**Live power across your energy community.** **Import** is drawn from the grid, **Export** is delivered back to it. **Result** is the net position: RESULT_SIGN_HINT\n\nValues only change when a new message arrives from the Energyboxx broker, so check the timestamp below the result if a figure looks frozen.",
+              "grid_options": {
+                "columns": 12
+              }
+            },
+            {
+              "type": "tile",
+              "entity": "sensor.community_power_result_kw",
+              "vertical": true,
+              "color": "purple",
+              "state_content": [
+                "state",
+                "last_changed"
+              ],
+              "grid_options": {
+                "columns": 12,
+                "rows": 2
+              }
+            },
+            {
+              "type": "tile",
+              "entity": "sensor.community_power_import_kw",
+              "color": "red",
+              "grid_options": {
+                "columns": 6,
+                "rows": 1
+              }
+            },
+            {
+              "type": "tile",
+              "entity": "sensor.community_power_export_kw",
+              "color": "green",
+              "grid_options": {
+                "columns": 6,
+                "rows": 1
+              }
+            },
+            {
+              "type": "history-graph",
+              "hours_to_show": 24,
+              "entities": [
+                {
+                  "entity": "sensor.community_power_import_kw"
+                },
+                {
+                  "entity": "sensor.community_power_export_kw"
+                },
+                {
+                  "entity": "sensor.community_power_result_kw"
+                }
+              ],
+              "grid_options": {
+                "columns": 12,
+                "rows": 4
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "heading",
+              "heading": "Community prices",
+              "heading_style": "title",
+              "icon": "mdi:account-group"
+            },
+            {
+              "type": "tile",
+              "entity": "sensor.community_shared_import_price_eur",
+              "color": "orange",
+              "grid_options": {
+                "columns": 6,
+                "rows": 1
+              }
+            },
+            {
+              "type": "tile",
+              "entity": "sensor.community_shared_export_price_eur",
+              "color": "teal",
+              "grid_options": {
+                "columns": 6,
+                "rows": 1
+              }
+            },
+            {
+              "type": "history-graph",
+              "hours_to_show": 24,
+              "entities": [
+                {
+                  "entity": "sensor.community_shared_import_price_eur"
+                },
+                {
+                  "entity": "sensor.community_shared_export_price_eur"
+                }
+              ],
+              "grid_options": {
+                "columns": 12,
+                "rows": 4
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "heading",
+              "heading": "Add-on",
+              "heading_style": "subtitle",
+              "icon": "mdi:puzzle"
+            },
+            {
+              "type": "markdown",
+              "content": "Shows whether a newer version of the Energyboxx add-on is available.",
+              "grid_options": {
+                "columns": 12
+              }
+            },
+            {
+              "type": "tile",
+              "entity": "update.energyboxx_integration_update",
+              "grid_options": {
+                "columns": 12,
+                "rows": 1
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -37,5 +37,14 @@ for i in $(seq 1 10); do
   sleep 10
 done
 
+bashio::log.info "Ensuring 'Energyboxx Flow Params' dashboard..."
+FLIP_POWER_RESULT_KW=$(bashio::config 'flip_power_result_kw')
+export FLIP_POWER_RESULT_KW
+if python3 /app/create_dashboard.py; then
+  bashio::log.info "Dashboard ready."
+else
+  bashio::log.warning "Dashboard setup failed; continuing with MQTT ingest."
+fi
+
 export ENERGYBOXX_HOST ENERGYBOXX_PORT
 exec /app/mqtt_helper_listener.sh

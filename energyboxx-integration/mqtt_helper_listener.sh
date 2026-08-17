@@ -52,9 +52,27 @@ update_sensor() {
   local escaped_topic=$(json_escape "$topic")
   local escaped_name=$(json_escape "$friendly_name")
 
+  local unit=""
+  local device_class=""
+  case "$key" in
+    *_kw)
+      unit="kW"
+      device_class="power"
+      ;;
+    *_price_eur)
+      unit="€/kWh"
+      ;;
+  esac
+
   local attrs="\"friendly_name\": \"${escaped_name}\", \"source_topic\": \"${escaped_topic}\""
   if is_numeric "$value"; then
     attrs="${attrs}, \"state_class\": \"measurement\""
+    if [ -n "$unit" ]; then
+      attrs="${attrs}, \"unit_of_measurement\": \"${unit}\""
+    fi
+    if [ -n "$device_class" ]; then
+      attrs="${attrs}, \"device_class\": \"${device_class}\""
+    fi
   fi
 
   local payload="{\"state\": \"${escaped_value}\", \"attributes\": {${attrs}}}"

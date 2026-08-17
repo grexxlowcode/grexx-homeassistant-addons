@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0] - 2026-08-17
+### Added
+- The add-on now creates or updates an "Energyboxx Flow Params" dashboard on every start, with sections for power flow, community prices, and add-on status, including 24-hour history graphs and explanatory text.
+- Numeric sensors now get `unit_of_measurement` (`kW` / `€/kWh`) and, for power, `device_class: power`.
+
+### Changed
+- Requires Home Assistant 2024.11.0 or newer, for the dashboard card types used.
+
 ## [1.1.0] - 2026-05-11
 ### Changed
 - Stripped configuration to three options: `energyboxx_mqtt_username`, `energyboxx_mqtt_password`, `community_topic`.

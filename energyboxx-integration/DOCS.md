@@ -1,5 +1,7 @@
 # Energyboxx Integration — Documentation
 
+Requires Home Assistant 2024.11.0 or newer. Older cores cannot render the dashboard's `heading` cards, so the Supervisor will not offer the add-on there.
+
 ## Options
 
 | Option | Required | Description |
@@ -23,6 +25,29 @@ Topic transformation example:
 - `community/power/main` → `sensor.community_power_main`
 
 Numeric values get the `state_class: measurement` attribute, so they show up as charts in Home Assistant.
+
+## Units
+
+Numeric sensors get metadata so Home Assistant renders and records them properly:
+
+| Entity suffix | Unit | Device class |
+|---|---|---|
+| `*_kw` | `kW` | `power` |
+| `*_price_eur` | `€/kWh` | — |
+
+If these sensors already had history without a unit, Home Assistant raises a one-off "units changed" repair notice after upgrading. Dismissing it is safe.
+
+## Dashboard
+
+On every start the add-on creates or updates a dashboard called **Energyboxx Flow Params** (URL path `energyboxx-flow-params`), shown in the sidebar. It has three sections:
+
+- **Power flow** — explanatory text, `sensor.community_power_result_kw` as a large tile with a last-changed timestamp, `sensor.community_power_import_kw` and `sensor.community_power_export_kw` side by side, and a 24-hour history graph of all three.
+- **Community prices** — `sensor.community_shared_import_price_eur` and `sensor.community_shared_export_price_eur` plus a 24-hour history graph.
+- **Add-on** — `update.energyboxx_integration_update`.
+
+The explanation of the `power_result_kw` sign follows the `flip_power_result_kw` option, so it stays correct whichever way you set it.
+
+The layout lives in `dashboard.json` and is written over the Home Assistant WebSocket API. **Manual edits to this dashboard are overwritten the next time the add-on starts** — copy it to a new dashboard if you want to customise it. Dashboard failures are logged as warnings and never stop MQTT ingest.
 
 ## Troubleshooting
 
