@@ -39,10 +39,12 @@ If these sensors already had history without a unit, Home Assistant raises a one
 
 ## Dashboard
 
-On every start the add-on creates or updates a dashboard called **Energyboxx Flow Params** (URL path `energyboxx-flow-params`), shown in the sidebar. It has three sections:
+On every start the add-on creates or updates a dashboard called **Energyboxx Flow Params** (URL path `energyboxx-flow-params`), shown in the sidebar. It has five sections:
 
 - **Power flow** — explanatory text, `sensor.community_power_result_kw` as a large tile with a last-changed timestamp, `sensor.community_power_import_kw` and `sensor.community_power_export_kw` side by side, and a 24-hour history graph of all three.
+- **Grid prices** — `sensor.community_import_price_eur` and `sensor.community_export_price_eur` plus a 24-hour history graph.
 - **Community prices** — `sensor.community_shared_import_price_eur` and `sensor.community_shared_export_price_eur` plus a 24-hour history graph.
+- **Sun** — sunrise and sunset, from `sensor.sun_next_rising` and `sensor.sun_next_setting`. These come from Home Assistant's built-in Sun integration; if they have been disabled the tiles show as unavailable.
 - **Add-on** — `update.energyboxx_integration_update`.
 
 The explanation of the `power_result_kw` sign follows the `flip_power_result_kw` option, so it stays correct whichever way you set it.

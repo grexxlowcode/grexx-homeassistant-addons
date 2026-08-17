@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0] - 2026-08-17
+### Added
+- Dashboard: "Grid prices" section with `sensor.community_import_price_eur` and `sensor.community_export_price_eur` plus a 24-hour history graph.
+- Dashboard: "Sun" section with sunrise and sunset times.
+
+### Removed
+- Dashboard: the note about values only changing when a broker message arrives.
+
 ## [1.2.0] - 2026-08-17
 ### Added
 - The add-on now creates or updates an "Energyboxx Flow Params" dashboard on every start, with sections for power flow, community prices, and add-on status, including 24-hour history graphs and explanatory text.

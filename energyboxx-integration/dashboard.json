@@ -16,7 +16,7 @@
             },
             {
               "type": "markdown",
-              "content": "**Live power across your energy community.** **Import** is drawn from the grid, **Export** is delivered back to it. **Result** is the net position: RESULT_SIGN_HINT\n\nValues only change when a new message arrives from the Energyboxx broker, so check the timestamp below the result if a figure looks frozen.",
+              "content": "**Live power across your energy community.** **Import** is drawn from the grid, **Export** is delivered back to it. **Result** is the net position: RESULT_SIGN_HINT",
               "grid_options": {
                 "columns": 12
               }
@@ -79,6 +79,51 @@
           "cards": [
             {
               "type": "heading",
+              "heading": "Grid prices",
+              "heading_style": "title",
+              "icon": "mdi:currency-eur"
+            },
+            {
+              "type": "tile",
+              "entity": "sensor.community_import_price_eur",
+              "color": "orange",
+              "grid_options": {
+                "columns": 6,
+                "rows": 1
+              }
+            },
+            {
+              "type": "tile",
+              "entity": "sensor.community_export_price_eur",
+              "color": "teal",
+              "grid_options": {
+                "columns": 6,
+                "rows": 1
+              }
+            },
+            {
+              "type": "history-graph",
+              "hours_to_show": 24,
+              "entities": [
+                {
+                  "entity": "sensor.community_import_price_eur"
+                },
+                {
+                  "entity": "sensor.community_export_price_eur"
+                }
+              ],
+              "grid_options": {
+                "columns": 12,
+                "rows": 4
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "heading",
               "heading": "Community prices",
               "heading_style": "title",
               "icon": "mdi:account-group"
@@ -115,6 +160,39 @@
               "grid_options": {
                 "columns": 12,
                 "rows": 4
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "cards": [
+            {
+              "type": "heading",
+              "heading": "Sun",
+              "heading_style": "title",
+              "icon": "mdi:weather-sunny"
+            },
+            {
+              "type": "tile",
+              "entity": "sensor.sun_next_rising",
+              "name": "Sunrise",
+              "icon": "mdi:weather-sunset-up",
+              "color": "amber",
+              "grid_options": {
+                "columns": 6,
+                "rows": 1
+              }
+            },
+            {
+              "type": "tile",
+              "entity": "sensor.sun_next_setting",
+              "name": "Sunset",
+              "icon": "mdi:weather-sunset-down",
+              "color": "deep-orange",
+              "grid_options": {
+                "columns": 6,
+                "rows": 1
               }
             }
           ]
