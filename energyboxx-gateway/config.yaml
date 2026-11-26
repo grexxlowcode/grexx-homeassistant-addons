@@ -1,0 +1,17 @@
+name: "Energyboxx Gateway"
+description: "Sends your Home Assistant energy sensors to the Energyboxx platform"
+version: "0.1.0"
+slug: "energyboxx_gateway"
+init: false
+homeassistant: "2024.11.0"
+arch:
+  - aarch64
+  - amd64
+boot: auto
+startup: application
+options:
+  connection_code: ""
+schema:
+  connection_code: password
+  log_level: list(debug|info|warning|error)?
+homeassistant_api: true
