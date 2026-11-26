@@ -44,25 +44,25 @@ The code is URL-safe base64 (padding optional) of a JSON object:
 ```json
 {"v": 1, "host": "ess.grexxconnect.com", "port": 8883,
  "user": "<broker user>", "pass": "<broker password>",
- "base": "eb/<env>/<secret>"}
+ "base": "energyboxx/<env>/<secret>"}
 ```
 
 | Field | Required | Notes |
 |---|---|---|
 | `v` | yes | Format version, must be `1`. |
 | `user`, `pass` | yes | Broker credentials. |
-| `base` | yes | The home's `homeBaseTopic`: exactly 3 non-empty segments, no `+` or `#`. While a shared broker account is used, make the last segment a random secret (at least 128 bits) so homes cannot write to each other's topics. Regenerate it to revoke a code. |
+| `base` | yes | Topic prefix: the device gateway's `GATEWAY_BASE_TOPIC` (e.g. `energyboxx/prod`) plus the home's `homeBaseTopic`, exactly 3 non-empty segments, no `+` or `#`. While a shared broker account is used, make the last segment a random secret (at least 128 bits) so homes cannot write to each other's topics. Regenerate it to revoke a code. |
 | `host`, `port` | no | Default `ess.grexxconnect.com:8883`. |
 
-Extra fields are ignored. The broker account needs write access to `base/#` only; with a shared account, give it write-only access so it cannot discover other homes' topics:
+Extra fields are ignored. The broker account needs write access to `base/sensor/#` only. With a shared account, give it write-only access so it cannot discover other homes' topics, and keep the `sensor` segment so it cannot overwrite `energyboxx/<env>/community/...`:
 
 ```
 user <shared user>
-topic write eb/#
+topic write energyboxx/<env>/+/sensor/#
 ```
 
 Generate a test code:
 
 ```bash
-python3 -c 'import base64,json;print(base64.urlsafe_b64encode(json.dumps({"v":1,"user":"u","pass":"p","base":"eb/dev/secret"}).encode()).decode().rstrip("="))'
+python3 -c 'import base64,json;print(base64.urlsafe_b64encode(json.dumps({"v":1,"user":"u","pass":"p","base":"energyboxx/dev/secret"}).encode()).decode().rstrip("="))'
 ```
