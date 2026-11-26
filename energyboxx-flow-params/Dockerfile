@@ -7,6 +7,7 @@ WORKDIR /app
 
 COPY run.sh ./run.sh
 COPY mqtt_helper_listener.sh ./mqtt_helper_listener.sh
+COPY notify.sh ./notify.sh
 COPY create_dashboard.py ./create_dashboard.py
 COPY dashboard.json ./dashboard.json
 COPY ca.crt ./ca.crt

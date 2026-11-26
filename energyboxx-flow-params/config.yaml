@@ -1,15 +1,12 @@
-name: "Energyboxx Integration"
-description: "Integration for Energyboxx with MQTT community topic subscription"
-version: "1.3.0"
+name: "Energyboxx Flow Params"
+description: "Shows your Energyboxx community's live power flow and prices in Home Assistant"
+version: "1.4.0"
 slug: "energyboxx"
 init: false
 homeassistant: "2024.11.0"
 arch:
   - aarch64
   - amd64
-  - armhf
-  - armv7
-  - i386
 boot: auto
 options:
   energyboxx_mqtt_username: ""
@@ -21,6 +18,7 @@ schema:
   energyboxx_mqtt_password: password
   community_topic: str
   flip_power_result_kw: bool
+  log_level: list(debug|info|warning|error)?
 logs: true
 homeassistant_api: true
 hassio_api: true

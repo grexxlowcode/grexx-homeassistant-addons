@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.0] - 2026-11-26
+### Changed
+- Renamed the add-on to "Energyboxx Flow Params". The slug stays `energyboxx`, so existing installs keep their settings and updates.
+- The "Flip power result" option is now called "Show community export as positive", with a description that says what each setting means.
+- Per-message log lines moved to debug level. A new optional `log_level` option shows them again.
+- Base image updated to Alpine 3.22.
+
+### Added
+- Connection problems and missing credentials show up as a Home Assistant notification instead of only in the log.
+- The add-on reconnects every 30 seconds after a dropped or refused connection, instead of stopping.
+- After a Home Assistant restart the add-on reconnects, so the community sensors come back within two minutes instead of staying empty until the next broker update.
+
+### Removed
+- Support for 32-bit systems (`armhf`, `armv7`, `i386`), which Home Assistant no longer supports.
+
 ## [1.3.0] - 2026-08-17
 ### Added
 - Dashboard: "Grid prices" section with `sensor.community_import_price_eur` and `sensor.community_export_price_eur` plus a 24-hour history graph.

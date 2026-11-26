@@ -9,5 +9,8 @@ configuration:
     name: Community-topic
     description: MQTT-topicpatroon waarop wordt geabonneerd (standaard community/#).
   flip_power_result_kw:
-    name: Vermogensresultaat omkeren (kW)
-    description: Vermenigvuldig sensor.power_result_kw met -1 zodat het teken voor import/export overeenkomt met de Home Assistant-conventie.
+    name: Community-export als positief tonen
+    description: Als dit aan staat, is sensor.community_power_result_kw positief zolang je community meer teruglevert dan afneemt. Zet het uit om het teken van de broker te houden (positief betekent afnemen).
+  log_level:
+    name: Logniveau
+    description: Hoeveel de add-on in zijn log schrijft. Kies debug om elk MQTT-bericht te zien.

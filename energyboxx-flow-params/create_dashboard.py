@@ -37,13 +37,19 @@ def log(message):
     print(message, flush=True)
 
 
-def load_config():
+# The update entity's id follows the add-on name at install time, so it is looked up.
+UPDATE_ENTITY_TOKEN = "ADDON_UPDATE_ENTITY"
+FALLBACK_UPDATE_ENTITY = "update.energyboxx_flow_params_update"
+
+
+def load_config(update_entity):
     with open(CONFIG_FILE) as handle:
         raw = handle.read()
 
     flipped = os.environ.get("FLIP_POWER_RESULT_KW", "true").lower() == "true"
     hint = SIGN_HINT_FLIPPED if flipped else SIGN_HINT_RAW
-    return json.loads(raw.replace(SIGN_HINT_TOKEN, hint))
+    raw = raw.replace(SIGN_HINT_TOKEN, hint).replace(UPDATE_ENTITY_TOKEN, update_entity)
+    return json.loads(raw)
 
 
 class CommandFailed(Exception):
@@ -91,6 +97,20 @@ def authenticate(ws, token):
         )
 
 
+def find_update_entity(client):
+    unique_id = "{0}_version_latest".format(os.environ.get("ADDON_SLUG", ""))
+    try:
+        entries = client.command({"type": "config/entity_registry/list"}) or []
+    except CommandFailed as err:
+        log("Entity registry lookup failed: {0}".format(err))
+        entries = []
+    for entry in entries:
+        if entry.get("platform") == "hassio" and entry.get("unique_id") == unique_id:
+            return entry["entity_id"]
+    log("Update entity for '{0}' not found; using {1}.".format(unique_id, FALLBACK_UPDATE_ENTITY))
+    return FALLBACK_UPDATE_ENTITY
+
+
 def ensure_dashboard(client):
     dashboards = client.command({"type": "lovelace/dashboards/list"}) or []
     if any(dashboard.get("url_path") == URL_PATH for dashboard in dashboards):
@@ -116,8 +136,6 @@ def main():
         log("SUPERVISOR_TOKEN missing; cannot manage the dashboard.")
         return 1
 
-    config = load_config()
-
     try:
         ws = create_connection(WS_URL, timeout=TIMEOUT)
     except Exception as err:  # noqa: BLE001 - any connection problem is non-fatal
@@ -127,6 +145,7 @@ def main():
     try:
         authenticate(ws, token)
         client = Client(ws)
+        config = load_config(find_update_entity(client))
         ensure_dashboard(client)
         client.command(
             {
