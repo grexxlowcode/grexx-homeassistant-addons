@@ -1,18 +1,14 @@
 #!/usr/bin/with-contenv bashio
+# shellcheck source=notify.sh
+source /app/notify.sh
 
-bashio::log.info "Starting Energyboxx MQTT Add-on..."
+bashio::log.info "Starting Energyboxx Flow Params add-on..."
 
 ENERGYBOXX_HOST="ess.grexxconnect.com"
 ENERGYBOXX_PORT=8883
 
 ENERGYBOXX_USER=$(bashio::config 'energyboxx_mqtt_username')
 ENERGYBOXX_PASSWORD=$(bashio::config 'energyboxx_mqtt_password')
-COMMUNITY_TOPIC=$(bashio::config 'community_topic')
-
-if [ -z "$ENERGYBOXX_USER" ] || [ -z "$ENERGYBOXX_PASSWORD" ]; then
-  bashio::log.error "energyboxx_mqtt_username and energyboxx_mqtt_password are required."
-  exit 1
-fi
 
 bashio::log.info "Installing CA certificate..."
 mkdir -p /config/ssl
@@ -37,9 +33,16 @@ for i in $(seq 1 10); do
   sleep 10
 done
 
+if [ -z "$ENERGYBOXX_USER" ] || [ -z "$ENERGYBOXX_PASSWORD" ]; then
+  bashio::log.error "energyboxx_mqtt_username and energyboxx_mqtt_password are required."
+  notify "Enter your Energyboxx username and password in the add-on's Configuration tab, then start the add-on again."
+  exit 1
+fi
+
 bashio::log.info "Ensuring 'Energyboxx Flow Params' dashboard..."
 FLIP_POWER_RESULT_KW=$(bashio::config 'flip_power_result_kw')
-export FLIP_POWER_RESULT_KW
+ADDON_SLUG=$(bashio::addon.slug)
+export FLIP_POWER_RESULT_KW ADDON_SLUG
 if python3 /app/create_dashboard.py; then
   bashio::log.info "Dashboard ready."
 else

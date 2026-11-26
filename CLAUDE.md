@@ -4,184 +4,60 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is a Home Assistant add-on repository for the Energyboxx Integration. The add-on creates an MQTT bridge between a remote Energyboxx broker (ess.grexxconnect.com) and Home Assistant to subscribe to community topics and automatically create helpers or sensors for each subtopic.
+Home Assistant add-on repository (GitHub: `grexxlowcode/grexx-homeassistant-addons`). It contains one add-on, **Energyboxx Flow Params** (slug `energyboxx`), which subscribes to the Energyboxx community MQTT topics on `ess.grexxconnect.com:8883` and turns every subtopic into a `sensor.community_*` entity in Home Assistant, plus an "Energyboxx Flow Params" dashboard.
+
+The add-on only reads. It never publishes to the broker.
 
 ## Repository Structure
 
-- `energyboxx-integration/` - Main add-on directory
-  - `run.sh` - Main entrypoint script (bashio-based)
-  - `config.yaml` - Add-on configuration schema and defaults
-  - `Dockerfile` - Alpine-based container with mosquitto, tailscale, and utilities
-  - `mosquitto.conf` - Template for mosquitto bridge configuration
-  - `mqtt_helper_listener.sh` - Background script for helper creation/updates (helper approach)
-  - `automation.json` - Unused (legacy file, kept for compatibility)
-  - `statestream-config.yaml` - Unused (legacy file, kept for compatibility)
+- `energyboxx-flow-params/` — the add-on. The directory name is free; HA identifies the add-on by `slug` in `config.yaml`. **Never change the slug**: existing installs would lose their options and stop receiving updates.
+  - `config.yaml` — options schema, version, architectures (`aarch64`, `amd64`)
+  - `build.yaml` — base images (`ghcr.io/home-assistant/<arch>-base:3.22`)
+  - `Dockerfile` — installs `jq mosquitto-clients curl python3 py3-websocket-client`
+  - `run.sh` — entrypoint: installs CA, waits for HA API, checks credentials, builds the dashboard, then `exec`s the listener
+  - `mqtt_helper_listener.sh` — `mosquitto_sub` loop that writes sensors via `POST /api/states`
+  - `notify.sh` — sourced helpers to create/dismiss the HA persistent notification `energyboxx_flow_params`
+  - `create_dashboard.py` — creates/overwrites the Lovelace dashboard over the HA WebSocket API
+  - `dashboard.json` — dashboard layout with tokens `RESULT_SIGN_HINT` and `ADDON_UPDATE_ENTITY`
+  - `ca.crt` — CA for the broker's TLS certificate
+  - `translations/en.yaml`, `translations/nl.yaml` — option labels; keep both in sync
+  - `DOCS.md`, `README.md`, `CHANGELOG.md` — user-facing; update with every change and bump `version` in `config.yaml`
 
-## Development Environment
+## Runtime Flow
 
-The repository includes a devcontainer configuration for Home Assistant add-on development.
+1. `run.sh` waits for `http://supervisor/core/api/` (up to 10 × 10s), then exits with a notification if username or password is empty.
+2. `create_dashboard.py` looks up the add-on's update entity in the entity registry (unique id `<full slug>_version_latest`, platform `hassio`) because its entity id depends on the add-on name at install time. Dashboard failures never stop ingest.
+3. `mqtt_helper_listener.sh`:
+   - Runs `mosquitto_sub` against the broker in an endless loop with a 30s reconnect delay.
+   - Lines starting with `Error`, `Connection error` or `Unable to connect` are broker errors: logged and shown as a notification. Any data message dismisses it.
+   - Topic → entity: strip the `community_topic` prefix, lowercase, `/` → `_`, keep `[a-z0-9_]`, prefix `sensor.`.
+   - `*_kw` gets unit `kW` + device class `power`; `*_price_eur` gets `€/kWh`; numeric values get `state_class: measurement`.
+   - `flip_power_result_kw` (UI label "Show community export as positive") negates `sensor.community_power_result_kw`.
+   - A background watcher probes the last written sensor every 60s; a 404 means HA core restarted and wiped the states, so it kills `mosquitto_sub` to reconnect and receive the broker's retained values again.
 
-### Starting Development Environment
+## Options
+
+| Option | Notes |
+|---|---|
+| `energyboxx_mqtt_username` / `energyboxx_mqtt_password` | Required. |
+| `community_topic` | Default `community/#`. |
+| `flip_power_result_kw` | Default `true`. |
+| `log_level` | Optional (`debug`, `info`, `warning`, `error`), applied with `bashio::log.level`. Per-message lines log at debug. |
+
+Host and port are fixed in `run.sh`.
+
+## Testing Changes
+
+There is no automated test suite. Validate locally with:
 
 ```bash
-# In VSCode with devcontainer support, the container will auto-start
-# Run the default task to start Home Assistant
-supervisor_run
+bash -n energyboxx-flow-params/*.sh
+python3 -m py_compile energyboxx-flow-params/create_dashboard.py
+docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/aarch64-base:3.22 energyboxx-flow-params
 ```
 
-The devcontainer maps:
-- Port 7123 → Home Assistant web UI (8123)
-- Port 7357 → Debug port (4357)
-- Workspace to `/mnt/supervisor/addons/local/energyboxx-addon`
+Then test in Home Assistant: the devcontainer (`.devcontainer/devcontainer.json`, task `supervisor_run`, UI on port 7123) mounts the repo as a local add-on. Rebuild and restart the add-on and check its Log tab.
 
-## Architecture
+## History
 
-### MQTT Bridge Flow
-
-1. **Initialization** (`run.sh:1-48`):
-   - Resolves remote broker IP (handles Tailscale if enabled)
-   - Optionally starts Tailscale daemon for secure connectivity
-   - Overrides `/etc/hosts` to ensure correct broker resolution
-
-2. **Mosquitto Configuration** (`run.sh:50-89`):
-   - Generates `/etc/mosquitto/mosquitto.conf` from template
-   - Replaces tokens: `HOST_REPLACE_TOKEN`, `USERNAME_REPLACE_TOKEN`, `PASSWORD_REPLACE_TOKEN`, `CLIENT_ID_REPLACE_TOKEN`, `COMMUNITY_TOPIC_REPLACE_TOKEN`
-   - Decodes base64-encoded CA certificate to `/config/ssl/` for TLS verification
-   - Starts mosquitto bridge on port 1885
-   - Subscribes one-way to community topic (no publishing back to remote broker)
-
-3. **Home Assistant Integration** (`run.sh:91-140`):
-   - Waits for Home Assistant API to be available
-   - Based on `use_mqtt_sensors` feature flag, either:
-     - **Helper Approach (default)**: Starts `mqtt_helper_listener.sh` to create input_text helpers
-     - **MQTT Sensor Approach**: Configures MQTT sensor integration in `configuration.yaml`
-
-4. **Helper Listener** (`mqtt_helper_listener.sh`):
-   - Subscribes to community topic on local broker (127.0.0.1:1885)
-   - Converts MQTT topics to entity IDs (e.g., `community/temp/sensor1` → `input_text.community_temp_sensor1`)
-   - Creates `input_text` helpers via Home Assistant REST API
-   - Updates helper values when MQTT messages arrive
-   - Tracks created helpers in `/data/created_helpers.txt` to avoid duplicates
-
-### Certificate Handling
-
-The add-on uses CA-only TLS verification:
-- CA certificate is decoded from `mqtt_client_cafile_b64` config option
-- No client certificates required (removed in refactoring)
-- TLS connection to remote broker uses CA for server verification only
-
-### Topic Transformation
-
-MQTT topics are transformed to entity IDs (`mqtt_helper_listener.sh`):
-- Remove `community/` prefix
-- Replace slashes (`/`) with underscores (`_`)
-- Remove invalid characters (keep only alphanumeric and underscore)
-- Prefix with `input_text.community_`
-- Example: `community/temp/sensor1` → `input_text.community_temp_sensor1`
-
-### Feature Flag: Helper vs Sensor Approach
-
-**Helper Approach** (`use_mqtt_sensors: false` - default):
-- Active listener script (`mqtt_helper_listener.sh`) runs in background
-- Dynamically creates `input_text` helpers for each subtopic
-- Updates helper values via Home Assistant REST API
-- Last updated tracked via entity `last_updated` attribute (automatic in HA)
-
-**MQTT Sensor Approach** (`use_mqtt_sensors: true`):
-- Configures MQTT sensor integration in `configuration.yaml`
-- Requires manual sensor definitions or MQTT discovery protocol
-- Sensors auto-created by Home Assistant MQTT integration
-- Simpler setup, but less dynamic than helper approach
-
-## Configuration Options
-
-All configuration is in `energyboxx-integration/config.yaml`:
-
-- `energyboxx_mqtt_host` - Remote broker hostname (default: ess.grexxconnect.com)
-- `energyboxx_mqtt_port` - Remote broker port (default: 8883)
-- `energyboxx_mqtt_username/password` - Credentials for remote broker
-- `mqtt_client_cafile_b64` - Base64-encoded CA certificate for TLS verification
-- `community_topic` - MQTT topic pattern to subscribe to (default: "community/#")
-- `use_mqtt_sensors` - Feature flag: false = helpers (default), true = MQTT sensors
-- `tailscale_enabled` - Enable Tailscale connectivity (default: false)
-- `tailscale_authkey` - Tailscale authentication key
-
-## Building and Testing
-
-### Building the Add-on
-
-Home Assistant add-ons are built automatically by the Supervisor when installed locally or from the repository. The build uses the `Dockerfile` with the following dependencies:
-
-```dockerfile
-apk add --no-cache jq mosquitto mosquitto-clients tailscale iptables ip6tables iproute2
-```
-
-### Testing Changes
-
-1. Make changes to files in `energyboxx-integration/`
-2. Rebuild the add-on in Home Assistant (Settings → Add-ons → Energyboxx Integration → Rebuild)
-3. Restart the add-on
-4. Check logs in the add-on's Log tab
-
-### Debugging
-
-The add-on logs extensively using `bashio::log.info`, `bashio::log.warning`, and `bashio::log.error`. Key debug points:
-
-- Broker IP resolution: `run.sh:12-17`
-- Tailscale status: `run.sh:23-48`
-- SSL certificate files: `run.sh:82-83`
-- Supervisor API responses: `run.sh:109-110`
-- MQTT messages received: `mqtt_helper_listener.sh:96`
-- Helper creation/updates: `mqtt_helper_listener.sh:42, 72`
-
-## Important Notes
-
-### Token Replacement in mosquitto.conf
-
-The mosquitto.conf uses token-based replacement (`run.sh:61-65`). When modifying the template:
-- Use `sed -i` for in-place replacement
-- Tokens must match exactly: `HOST_REPLACE_TOKEN`, `USERNAME_REPLACE_TOKEN`, `PASSWORD_REPLACE_TOKEN`, `CLIENT_ID_REPLACE_TOKEN`, `COMMUNITY_TOPIC_REPLACE_TOKEN`
-
-### Helper Tracking
-
-The helper listener tracks created helpers in `/data/created_helpers.txt`:
-- Persists across container restarts
-- Prevents duplicate API calls for existing helpers
-- Delete file to force recreation of all helpers
-
-### Home Assistant API Endpoints
-
-The add-on uses these Home Assistant REST API endpoints:
-
-**Create Helper:**
-```bash
-POST http://supervisor/core/api/services/input_text/create
-Body: {"name": "helper_name", "min": 0, "max": 255, "initial": ""}
-```
-
-**Update Helper:**
-```bash
-POST http://supervisor/core/api/services/input_text/set_value
-Body: {"entity_id": "input_text.community_sensor1", "value": "new_value"}
-```
-
-### Last Updated Tracking
-
-Both helpers and sensors automatically track when they were last updated via the `last_updated` attribute:
-- Access in templates: `states['input_text.community_sensor1'].last_updated`
-- No additional configuration required
-
-### Tailscale Login Server
-
-Tailscale uses a custom headscale server: `https://headscale.grexx.io` (`run.sh:34`)
-
-### Process Architecture
-
-When using helper approach (default):
-```
-run.sh (PID 1)
-├── mosquitto (background)
-├── tailscaled (background, if enabled)
-└── mqtt_helper_listener.sh (background)
-    └── mosquitto_sub (pipes to while loop)
-```
+Versions before 1.1.0 also published HA states upstream (mosquitto bridge `topic # both`, `mqtt_statestream`, Tailscale via `headscale.grexx.io`). All of that was removed; see `CHANGELOG.md` and git history (last publishing version: `06cd5a6`).

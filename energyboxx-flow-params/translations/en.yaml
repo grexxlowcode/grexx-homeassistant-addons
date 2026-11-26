@@ -9,5 +9,8 @@ configuration:
     name: Community topic
     description: MQTT topic pattern to subscribe to (default community/#).
   flip_power_result_kw:
-    name: Flip power result (kW)
-    description: Multiply sensor.power_result_kw by -1 so import/export sign matches Home Assistant convention.
+    name: Show community export as positive
+    description: When on, sensor.community_power_result_kw is positive while your community exports more than it imports. Turn off to keep the broker's sign (positive means importing).
+  log_level:
+    name: Log level
+    description: How much the add-on writes to its log. Use debug to see every MQTT message.

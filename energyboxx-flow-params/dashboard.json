@@ -208,14 +208,14 @@
             },
             {
               "type": "markdown",
-              "content": "Shows whether a newer version of the Energyboxx add-on is available.",
+              "content": "Shows whether a newer version of the Energyboxx Flow Params add-on is available.",
               "grid_options": {
                 "columns": 12
               }
             },
             {
               "type": "tile",
-              "entity": "update.energyboxx_integration_update",
+              "entity": "ADDON_UPDATE_ENTITY",
               "grid_options": {
                 "columns": 12,
                 "rows": 1
