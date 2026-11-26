@@ -1,0 +1,7 @@
+configuration:
+  connection_code:
+    name: Koppelcode
+    description: Kopieer deze van de pagina "Home Assistant koppelen" van je woning op het Energyboxx-platform.
+  log_level:
+    name: Logniveau
+    description: Hoeveel de add-on in zijn log schrijft. Kies debug om elke verzonden waarde te zien.
