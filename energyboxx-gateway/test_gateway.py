@@ -2,6 +2,7 @@
 
 import base64
 import json
+import math
 
 import gateway
 
@@ -96,14 +97,14 @@ def test_publisher():
     assert client.sent == [], "fresh values are not resent"
 
     state, _ = pub.latest["sensor.p1_import"]
-    pub.latest["sensor.p1_import"] = (state, 0)
+    pub.latest["sensor.p1_import"] = (state, -math.inf)
     pub.resend_stale()
     assert [t for t, *_ in client.sent][-1] == "eb/prod/abc/sensor/p1_import/state"
     assert client.sent[0][1] != state["last_updated"], "resend carries a fresh timestamp"
 
     client.sent.clear()
     client.connected = False
-    pub.latest["sensor.p1_import"] = (state, 0)
+    pub.latest["sensor.p1_import"] = (state, -math.inf)
     pub.resend_stale()
     assert client.sent == [], "nothing is queued while disconnected"
 
@@ -120,22 +121,89 @@ def test_publisher():
     assert client.sent == [], "non-energy sensors are never published"
 
 
+def result(message_id, data, success=True):
+    return {"id": message_id, "type": "result", "success": success, "result": data}
+
+
 def test_handle_message():
     client = FakeClient()
     pub = gateway.Publisher("a/b/c")
     pub.client = client
+    inv = gateway.Inventory()
+    gateway.handle_message(result(2, [sensor("sensor.x", "1")]), pub, inv, {2: "states"})
+    assert "sensor.x" in pub.latest and "sensor.x" in inv.sensors and inv.loaded
     gateway.handle_message(
-        {"id": 2, "type": "result", "success": True, "result": [sensor("sensor.x", "1")]}, pub
+        {"type": "event", "event": {"data": {"entity_id": "sensor.x", "new_state": None}}}, pub, inv, {}
     )
-    assert "sensor.x" in pub.latest
-    gateway.handle_message(
-        {"type": "event", "event": {"data": {"entity_id": "sensor.x", "new_state": None}}}, pub
-    )
-    assert "sensor.x" not in pub.latest
+    assert "sensor.x" not in pub.latest and "sensor.x" not in inv.sensors
 
     pub.update(sensor("sensor.gone", "1"))
-    gateway.handle_message({"id": 2, "type": "result", "success": True, "result": []}, pub)
+    inv.track(sensor("sensor.gone", "1"))
+    gateway.handle_message(result(5, []), pub, inv, {5: "states"})
     assert "sensor.gone" not in pub.latest, "entities missing from a new snapshot are dropped"
+    assert "sensor.gone" not in inv.sensors
+
+    try:
+        gateway.handle_message(result(1, None, success=False), pub, inv, {1: "subscribe"})
+    except ConnectionError:
+        pass
+    else:
+        raise AssertionError("a failed subscription reconnects")
+
+
+def test_inventory():
+    client = FakeClient()
+    pub = gateway.Publisher("a/b/c")
+    pub.client = client
+    inv = gateway.Inventory()
+    requests = {3: "energy", 4: "entities", 5: "devices"}
+    gateway.handle_message(result(2, [sensor("sensor.p1", "unavailable")]), pub, inv, {2: "states"})
+    assert "sensor.p1" not in pub.latest and "sensor.p1" in inv.sensors, "unavailable sensors stay listed"
+    assert not inv.ready()
+
+    gateway.handle_message(result(3, None, success=False), pub, inv, requests)
+    assert gateway.energy_sources({
+        "energy_sources": [
+            {"type": "grid", "flow_from": [{"stat_energy_from": "sensor.in", "stat_cost": "sensor.c",
+                                            "entity_energy_price": "sensor.p"}], "cost_adjustment_day": 1},
+            {"type": "battery", "stat_energy_from": "sensor.out", "stat_energy_to": "sensor.in2"},
+        ],
+        "device_consumption": [{"stat_consumption": "sensor.washer"}],
+    }) == {"energy_sources": [
+        {"type": "grid", "flow_from": [{"stat_energy_from": "sensor.in"}]},
+        {"type": "battery", "stat_energy_from": "sensor.out", "stat_energy_to": "sensor.in2"},
+    ]}, "costs, prices and devices are not shared"
+    gateway.handle_message(result(4, [{"entity_id": "sensor.p1", "device_id": "d1"}]), pub, inv, requests)
+    gateway.handle_message(
+        result(5, [{"id": "d1", "name": "P1", "name_by_user": None, "manufacturer": "HW", "model": "P1"}]),
+        pub, inv, requests,
+    )
+    assert inv.ready() and not requests
+    assert inv.build() == {
+        "v": 1,
+        "energy": None,
+        "sensors": [{
+            "entity_id": "sensor.p1", "name": None, "device_class": "energy", "state_class": None,
+            "unit": "kWh", "device": {"name": "P1", "manufacturer": "HW", "model": "P1"},
+        }],
+    }
+
+    pub.publish_inventory(inv.build())
+    topic, payload, qos, retain = client.sent[-1]
+    assert (topic, qos, retain) == ("a/b/c/inventory", 1, True)
+    assert json.loads(payload)["generated_at"]
+    client.sent.clear()
+    pub.publish_inventory(inv.build())
+    assert client.sent == [], "unchanged inventory is not resent"
+
+    inv.track(sensor("sensor.p1", "5"))
+    pub.publish_inventory(inv.build())
+    assert client.sent == [], "a new value alone does not change the inventory"
+
+    pub.resend_all = True
+    pub.resend_stale()
+    pub.publish_inventory(inv.build())
+    assert client.sent[-1][0] == "a/b/c/inventory", "reconnect resends the inventory"
 
 
 if __name__ == "__main__":
