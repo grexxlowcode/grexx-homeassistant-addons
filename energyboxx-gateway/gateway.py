@@ -356,11 +356,11 @@ def handle_message(message, publisher, inventory, requests):
     if message.get("type") == "result":
         kind = requests.pop(message.get("id"), None)
         if kind in INVENTORY_REQUESTS:
+            error = message.get("error") or {}
             if not message.get("success"):
-                # energy/get_prefs fails when the energy dashboard was never set up.
-                (log.debug if kind == "energy" else log.warning)(
-                    "No %s for the inventory: %s", kind, message.get("error")
-                )
+                # energy/get_prefs answers not_found when the energy dashboard was never set up.
+                not_set_up = kind == "energy" and error.get("code") == "not_found"
+                (log.debug if not_set_up else log.warning)("No %s for the inventory: %s", kind, error)
             inventory.parts[kind] = message.get("result") if message.get("success") else None
             return
         if not message.get("success"):
