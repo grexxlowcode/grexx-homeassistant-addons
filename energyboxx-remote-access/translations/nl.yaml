@@ -1,0 +1,7 @@
+configuration:
+  access_code:
+    name: Toegangscode
+    description: Kopieer deze van de pagina "Toegang op afstand" van je woning op het Energyboxx-platform.
+  log_level:
+    name: Logniveau
+    description: Hoeveel de add-on in zijn log schrijft.
