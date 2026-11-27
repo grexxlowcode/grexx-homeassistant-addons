@@ -7,7 +7,9 @@ DEFAULT_PORT=7000
 # Shared and not secret: the tunnel server checks the per-home secret.
 TUNNEL_TOKEN="energyboxx-ha-tunnel"
 OPTIONS_FILE="${OPTIONS_FILE:-/data/options.json}"
-AUTH_CHECK_INTERVAL=300
+# Short, so a Home Assistant restart with a changed auth config is caught quickly.
+AUTH_CHECK_INTERVAL=15
+AUTH_OK_FLAG=/tmp/auth-ok
 
 log_level=$(jq -r '.log_level // "info"' "$OPTIONS_FILE")
 bashio::log.level "$log_level"
@@ -52,14 +54,15 @@ sed -e "s|__RESOLVER__|${resolver:-127.0.0.11}|" -e "s|__UPSTREAM__|${upstream}|
 
 # Tunnel traffic reaches Home Assistant from this add-on's private IP, which trusted_networks would let in without a password.
 auth_problem() {
-  local providers
+  local providers types
   providers=$(curl -sk -m 10 "${upstream}/auth/providers") || { echo "unreachable"; return; }
-  case "$providers" in
-    *trusted_networks*) echo "trusted_networks" ;;
-    *onboarding_required*) echo "onboarding" ;;
-    *'"providers"'*) echo "" ;;
-    *) echo "unreachable" ;;
-  esac
+  if jq -e '.code == "onboarding_required"' >/dev/null 2>&1 <<<"$providers"; then
+    echo "onboarding"
+  elif ! types=$(jq -er '.providers[].type' 2>/dev/null <<<"$providers"); then
+    echo "unreachable"
+  elif grep -qx trusted_networks <<<"$types"; then
+    echo "trusted_networks"
+  fi
 }
 
 refuse() {
@@ -72,15 +75,21 @@ check_auth() {
   case "$(auth_problem)" in
     trusted_networks) refuse "Home Assistant lets this add-on's network log in without a password (the trusted_networks auth provider). Remove that network from trusted_networks, restart Home Assistant and start the add-on again." ;;
     onboarding) refuse "Home Assistant is not set up yet. Finish onboarding first, so nobody else can create the owner account through remote access." ;;
-    unreachable) return 1 ;;
+    unreachable)
+      rm -f "$AUTH_OK_FLAG"
+      return 1
+      ;;
   esac
+  touch "$AUTH_OK_FLAG"
 }
 
+rm -f "$AUTH_OK_FLAG"
 until check_auth; do
   bashio::log.warning "Waiting for Home Assistant at ${upstream}..."
-  sleep 10
+  sleep "$AUTH_CHECK_INTERVAL"
 done
 
+# Fail closed: while the check cannot run, nginx answers 503.
 guard_auth() {
   while sleep "$AUTH_CHECK_INTERVAL"; do
     check_auth || true
