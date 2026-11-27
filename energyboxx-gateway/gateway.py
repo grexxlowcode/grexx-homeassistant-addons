@@ -4,10 +4,12 @@
 Topics follow Home Assistant's mqtt_statestream layout, which the Energyboxx
 device gateway (energyboxx-mqtt-subscriber) ingests:
 <base>/<domain>/<object_id>/{unit_of_measurement,last_updated,state}
+plus a retained <base>/inventory that the platform's onboarding page reads.
 """
 
 import base64
 import hashlib
+import itertools
 import json
 import logging
 import math
@@ -36,6 +38,12 @@ HA_PING_AFTER = 10
 # Resent values get a fresh timestamp, so stop once Home Assistant itself goes quiet.
 HA_SILENCE_LIMIT = 20
 NOTIFICATION_ID = "energyboxx_gateway"
+INVENTORY_REFRESH = 15 * 60
+INVENTORY_REQUESTS = {
+    "energy": "energy/get_prefs",
+    "entities": "config/entity_registry/list",
+    "devices": "config/device_registry/list",
+}
 
 log = logging.getLogger("energyboxx_gateway")
 
@@ -79,14 +87,17 @@ def is_number(value):
         return False
 
 
-def is_energy_sensor(state):
+def is_candidate(state):
     attributes = state.get("attributes") or {}
     return (
         state["entity_id"].startswith("sensor.")
         and attributes.get("device_class") in DEVICE_CLASSES
         and bool(attributes.get("unit_of_measurement"))
-        and is_number(state.get("state"))
     )
+
+
+def is_energy_sensor(state):
+    return is_candidate(state) and is_number(state.get("state"))
 
 
 def topic_root(base, entity_id):
@@ -105,6 +116,7 @@ class Publisher:
         self.units = {}
         self.latest = {}
         self.resend_all = False
+        self.inventory_sent = None
 
     def update(self, state):
         if is_energy_sensor(state):
@@ -138,10 +150,85 @@ class Publisher:
             # After a reconnect the broker may have lost its retained units.
             self.resend_all = False
             self.units.clear()
+            self.inventory_sent = None
             cutoff = math.inf
         for state, sent_at in list(self.latest.values()):
             if sent_at <= cutoff:
                 self.publish(state, now_iso())
+
+    def publish_inventory(self, inventory):
+        if inventory == self.inventory_sent or not self.client.is_connected():
+            return
+        payload = json.dumps(dict(inventory, generated_at=now_iso()), sort_keys=True)
+        rc = self.client.publish(self.base + "/inventory", payload, qos=1, retain=True).rc
+        # NO_CONN still queues the message; a reconnect clears inventory_sent anyway.
+        if rc in (mqtt.MQTT_ERR_SUCCESS, mqtt.MQTT_ERR_NO_CONN):
+            self.inventory_sent = inventory
+            log.info(
+                "Sent inventory: %d candidate sensors, energy dashboard %s.",
+                len(inventory["sensors"]),
+                "configured" if inventory["energy"] else "not configured",
+            )
+
+
+def energy_sources(prefs):
+    """Only the sensor choices per source; costs, prices and per-device consumption stay home."""
+    if not prefs:
+        return None
+
+    def keep(item):
+        return {k: v for k, v in item.items() if k == "type" or (k.startswith("stat_") and k != "stat_cost")}
+
+    sources = []
+    for source in prefs.get("energy_sources") or []:
+        entry = keep(source)
+        for flow in ("flow_from", "flow_to"):
+            if flow in source:
+                entry[flow] = [keep(item) for item in source[flow]]
+        sources.append(entry)
+    return {"energy_sources": sources}
+
+
+class Inventory:
+    """Candidate sensors (also unavailable ones), their devices and the energy dashboard setup."""
+
+    def __init__(self):
+        self.sensors = {}
+        self.parts = {}
+        self.loaded = False
+
+    def track(self, state):
+        if not is_candidate(state):
+            self.forget(state["entity_id"])
+            return
+        attributes = state["attributes"]
+        self.sensors[state["entity_id"]] = {
+            "name": attributes.get("friendly_name"),
+            "device_class": attributes.get("device_class"),
+            "state_class": attributes.get("state_class"),
+            "unit": attributes.get("unit_of_measurement"),
+        }
+
+    def forget(self, entity_id):
+        self.sensors.pop(entity_id, None)
+
+    def ready(self):
+        return self.loaded and all(kind in self.parts for kind in INVENTORY_REQUESTS)
+
+    def build(self):
+        devices = {device["id"]: device for device in self.parts["devices"] or []}
+        device_ids = {entry["entity_id"]: entry.get("device_id") for entry in self.parts["entities"] or []}
+        sensors = []
+        for entity_id, info in sorted(self.sensors.items()):
+            device = devices.get(device_ids.get(entity_id))
+            if device:
+                device = {
+                    "name": device.get("name_by_user") or device.get("name"),
+                    "manufacturer": device.get("manufacturer"),
+                    "model": device.get("model"),
+                }
+            sensors.append(dict(info, entity_id=entity_id, device=device))
+        return {"v": 1, "energy": energy_sources(self.parts["energy"]), "sensors": sensors}
 
 
 def call_service(token, service, payload):
@@ -221,16 +308,25 @@ def authenticate(ws, token):
         raise ConnectionError("Home Assistant rejected the token: {0}".format(reply.get("message")))
 
 
-def run_home_assistant(token, publisher):
+def run_home_assistant(token, publisher, inventory):
     ws = create_connection(WS_URL, timeout=30)
     try:
         authenticate(ws, token)
-        ws.send(json.dumps({"id": 1, "type": "subscribe_events", "event_type": "state_changed"}))
-        ws.send(json.dumps({"id": 2, "type": "get_states"}))
+        ids = itertools.count(1)
+        requests = {}
+
+        def send(kind, command, **fields):
+            message_id = next(ids)
+            if kind:
+                requests[message_id] = kind
+            ws.send(json.dumps(dict(fields, id=message_id, type=command)))
+
+        send("subscribe", "subscribe_events", event_type="state_changed")
+        send("states", "get_states")
         ws.settimeout(2)
         log.info("Connected to Home Assistant; watching energy sensors.")
         last_received = last_ping = time.monotonic()
-        ping_id = 2
+        last_inventory = -math.inf
         while True:
             try:
                 message = json.loads(ws.recv())
@@ -238,37 +334,56 @@ def run_home_assistant(token, publisher):
             except WebSocketTimeoutException:
                 message = None
             if message:
-                handle_message(message, publisher)
+                handle_message(message, publisher, inventory, requests)
             idle = time.monotonic() - last_received
             if idle > HA_SILENCE_LIMIT:
                 raise ConnectionError("Home Assistant stopped responding")
             if idle > HA_PING_AFTER and time.monotonic() - last_ping > HA_PING_AFTER:
-                ping_id += 1
-                ws.send(json.dumps({"id": ping_id, "type": "ping"}))
+                send(None, "ping")
                 last_ping = time.monotonic()
+            if time.monotonic() - last_inventory > INVENTORY_REFRESH:
+                for kind, command in INVENTORY_REQUESTS.items():
+                    send(kind, command)
+                last_inventory = time.monotonic()
             publisher.resend_stale()
+            if inventory.ready():
+                publisher.publish_inventory(inventory.build())
     finally:
         ws.close()
 
 
-def handle_message(message, publisher):
+def handle_message(message, publisher, inventory, requests):
     if message.get("type") == "result":
+        kind = requests.pop(message.get("id"), None)
+        if kind in INVENTORY_REQUESTS:
+            if not message.get("success"):
+                # energy/get_prefs fails when the energy dashboard was never set up.
+                (log.debug if kind == "energy" else log.warning)(
+                    "No %s for the inventory: %s", kind, message.get("error")
+                )
+            inventory.parts[kind] = message.get("result") if message.get("success") else None
+            return
         if not message.get("success"):
             raise ConnectionError("Home Assistant command failed: {0}".format(message.get("error")))
-        if message.get("id") == 2:
+        if kind == "states":
             states = message.get("result") or []
             for state in states:
                 publisher.update(state)
+                inventory.track(state)
+            inventory.loaded = True
             # Entities removed while disconnected never sent a state_changed event.
-            for entity_id in set(publisher.latest) - {state["entity_id"] for state in states}:
+            for entity_id in (set(publisher.latest) | set(inventory.sensors)) - {s["entity_id"] for s in states}:
                 publisher.forget(entity_id)
+                inventory.forget(entity_id)
             log.info("Sharing %d energy sensors.", len(publisher.latest))
     elif message.get("type") == "event":
         data = message["event"]["data"]
         if data.get("new_state") is None:
             publisher.forget(data["entity_id"])
+            inventory.forget(data["entity_id"])
         else:
             publisher.update(data["new_state"])
+            inventory.track(data["new_state"])
 
 
 def main():
@@ -304,13 +419,14 @@ def main():
     publisher = Publisher(conn["base"])
     client = make_client(conn, token, publisher)
     publisher.client = client
+    inventory = Inventory()
     log.info("Connecting to %s:%s", conn["host"], conn["port"])
     client.connect_async(conn["host"], conn["port"], keepalive=60)
     client.loop_start()
 
     while True:
         try:
-            run_home_assistant(token, publisher)
+            run_home_assistant(token, publisher, inventory)
         except Exception as err:  # noqa: BLE001 - keep publishing after any HA hiccup
             log.warning("Home Assistant connection lost (%s); retrying in %ss.", err, HA_RETRY_DELAY)
         time.sleep(HA_RETRY_DELAY)
